@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import { Lesson } from '../types';
-import { ArrowLeft, Play, Pause, Download, Volume2, User, FileJson, Clock, BookOpen, Trash2, Printer, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Download, Volume2, User, FileJson, Clock, BookOpen, Trash2, Printer, CheckCircle, AlertOctagon } from 'lucide-react';
 
 interface Props {
   onLogout: () => void;
@@ -26,22 +26,20 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage, studentId }) 
     }
   }, [msg]);
 
-  // Determine which lessons to show
-  // If studentId is provided, find that student and show only their assigned lessons
-  // If not provided, show ALL lessons (fallback or old behavior)
-  const displayedLessons = React.useMemo(() => {
-    if (studentId) {
-        const student = students.find(s => s.id === studentId);
-        if (student) {
-            return lessons.filter(l => student.assignedLessonIds.includes(l.id));
-        }
-        // If student ID invalid, maybe show nothing? Or all? Let's show empty for security.
-        return [];
-    }
-    return lessons;
-  }, [lessons, students, studentId]);
+  // VALIDATION: Check if student exists if ID is provided
+  const currentStudent = studentId ? students.find(s => s.id === studentId) : null;
+  const isInvalidStudent = studentId && !currentStudent;
 
-  const currentStudentName = studentId ? students.find(s => s.id === studentId)?.name : null;
+  // Determine which lessons to show
+  const displayedLessons = React.useMemo(() => {
+    if (currentStudent) {
+        return lessons.filter(l => currentStudent.assignedLessonIds.includes(l.id));
+    }
+    // Fallback: If no studentId (Teacher View) or student found, show all? 
+    // Actually if isInvalidStudent we handle below. If no studentId, show all (Teacher Library View)
+    if (!studentId) return lessons;
+    return [];
+  }, [lessons, currentStudent, studentId]);
 
   const handlePlayAudio = (base64: string | undefined, sentenceId: string) => {
     if (!base64) return;
@@ -77,6 +75,37 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage, studentId }) 
         if(activeLesson?.id === id) setActiveLesson(null);
     }
   };
+
+  // ERROR VIEW: Invalid Student ID
+  if (isInvalidStudent) {
+      return (
+        <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+            <div className="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full text-center">
+                <div className="bg-red-100 text-red-500 p-4 rounded-full inline-block mb-4">
+                    <AlertOctagon size={48} />
+                </div>
+                <h1 className="text-2xl font-bold text-gray-800 mb-2">Link Invalid or Expired</h1>
+                <p className="text-gray-600 mb-6">
+                    We could not find a student profile for this link. 
+                </p>
+                <div className="text-sm text-gray-400 bg-gray-50 p-3 rounded mb-6 text-left">
+                    <strong>Possible reasons:</strong>
+                    <ul className="list-disc pl-5 mt-1 space-y-1">
+                        <li>The teacher has updated the student list but hasn't uploaded the new data file yet.</li>
+                        <li>You are opening a link from a different device/browser in local test mode.</li>
+                        <li>The link is incomplete.</li>
+                    </ul>
+                </div>
+                <button 
+                    onClick={onLogout}
+                    className="bg-gray-800 text-white px-6 py-2 rounded-lg font-bold hover:bg-gray-900"
+                >
+                    Go to Home
+                </button>
+            </div>
+        </div>
+      );
+  }
 
   // Lesson Detail View
   if (activeLesson) {
@@ -214,10 +243,10 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage, studentId }) 
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
-                <BookOpen size={24}/> {currentStudentName ? `${currentStudentName}'s Library` : 'Student Library'}
+                <BookOpen size={24}/> {currentStudent ? `${currentStudent.name}'s Library` : 'Library'}
             </h1>
             <p className="opacity-90 text-sm mt-1">
-               {displayedLessons.length} Lesson{displayedLessons.length !== 1 ? 's' : ''} Assigned
+               {displayedLessons.length} Lesson{displayedLessons.length !== 1 ? 's' : ''} Available
             </p>
           </div>
           <button onClick={onLogout} className="text-orange-100 hover:text-white underline text-sm">Exit</button>
@@ -239,7 +268,7 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage, studentId }) 
                  <BookOpen size={32} className="text-gray-400"/>
              </div>
              <h3 className="text-lg font-bold text-gray-600 mb-2">No Lessons Assigned</h3>
-             <p>Hi {currentStudentName || 'Student'}, your teacher hasn't assigned any lessons yet.</p>
+             <p>Hi {currentStudent?.name || 'Student'}, your teacher hasn't assigned any lessons yet.</p>
            </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

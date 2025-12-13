@@ -72,25 +72,26 @@ const AppLogic: React.FC = () => {
         const sId = urlParams.get('studentId');
         
         // 2. Attempt to fetch static data (Deployed Mode)
+        // Note: Even if this fails (local dev), we proceed to check sId
         try {
             const res = await fetch('/student_data.json');
             if (res.ok) {
                 const data: ClassroomData = await res.json();
                 console.log("Static student data loaded", data);
-                
                 // Load data into context (sets isReadOnly=true)
                 loadStaticData(data);
-                
-                // If we have a student ID, auto-enter
-                if (sId) {
-                    setStudentIdFromUrl(sId);
-                    setMode(AppMode.STUDENT_PORTAL);
-                }
             } else {
-                console.log("No student_data.json found. Running in Teacher/Local Mode.");
+                console.log("No student_data.json found. Using local DB data.");
             }
         } catch (e) {
-            console.log("Failed to fetch static data (likely local mode or offline).");
+            console.log("Fetch error (offline/local). Using local DB data.");
+        }
+        
+        // 3. Auto-enter Student Portal if ID is present
+        // This runs REGARDLESS of whether static data fetch worked.
+        if (sId) {
+            setStudentIdFromUrl(sId);
+            setMode(AppMode.STUDENT_PORTAL);
         }
         
         // Handle teacher shortcut
