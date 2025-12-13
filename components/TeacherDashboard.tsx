@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
 import { Lesson, AppMode, Student } from '../types';
-import { Plus, Users, Trash2, Edit, History, Link as LinkIcon, UserPlus, Check, X, Share2, BookOpen, Download, AlertCircle } from 'lucide-react';
+import { Plus, Users, Trash2, Edit, History, Link as LinkIcon, UserPlus, Check, X, Share2, BookOpen, Download, AlertCircle, HelpCircle, UploadCloud, Settings } from 'lucide-react';
 
 interface Props {
   onNavigate: (mode: AppMode, data?: any) => void;
@@ -14,6 +14,13 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
   
   // State for the "Assign Lesson" dropdown in Student view
   const [assigningStudentId, setAssigningStudentId] = useState<string | null>(null);
+
+  // Export Guide Modal State
+  const [showExportGuide, setShowExportGuide] = useState(false);
+  
+  // New: Custom Filename State
+  const [dataFileName, setDataFileName] = useState('student_data.json');
+  const [isEditingFilename, setIsEditingFilename] = useState(false);
 
   const handleCreateLesson = () => {
     onNavigate(AppMode.TEACHER_EDITOR);
@@ -36,32 +43,88 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
   };
 
   // 1. Export Data Logic
-  const handleExportData = async () => {
+  const performExport = async () => {
       const data = await exportSystemData();
       const jsonString = JSON.stringify(data, null, 2);
       const blob = new Blob([jsonString], { type: "application/json" });
       const href = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = href;
-      link.download = "student_data.json";
+      // Use the custom filename configured by the user
+      link.download = dataFileName; 
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      alert("Data exported! \n\nPlease upload 'student_data.json' to the 'public' folder of your website deployment.");
   };
 
-  // 2. Generate Link Logic (Simpler now)
+  // 2. Generate Link Logic (Updated to include data filename)
   const copyStudentLink = (studentId: string, studentName: string) => {
       const baseUrl = window.location.origin + window.location.pathname;
-      const url = `${baseUrl}?studentId=${studentId}`;
+      let url = `${baseUrl}?studentId=${studentId}`;
+      
+      // Only append data param if it's NOT the default student_data.json
+      // This keeps URLs short for the standard use case
+      if (dataFileName !== 'student_data.json') {
+          url += `&data=${dataFileName}`;
+      }
       
       navigator.clipboard.writeText(url).then(() => {
-          alert(`Link copied for ${studentName}!\n\n${url}\n\nMake sure you have uploaded the latest 'student_data.json' to the server for this link to work.`);
+          alert(`Link copied for ${studentName}!\n\n${url}\n\nIMPORTANT: Ensure you have uploaded the file named '${dataFileName}' to your website.`);
       });
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
+    <div className="max-w-6xl mx-auto p-6 relative">
+      {/* EXPORT INSTRUCTION MODAL */}
+      {showExportGuide && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6">
+            <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+              <UploadCloud size={24} className="text-teal-600"/>
+              How to Publish Updates
+            </h3>
+            
+            <div className="space-y-4 text-gray-600 mb-6">
+              <div className="flex gap-3">
+                 <div className="bg-teal-100 text-teal-800 w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0">1</div>
+                 <div>
+                    <p className="text-sm pt-1">Click <strong>Download Data</strong> below.</p>
+                 </div>
+              </div>
+              <div className="flex gap-3">
+                 <div className="bg-teal-100 text-teal-800 w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0">2</div>
+                 <div>
+                    <p className="text-sm pt-1 font-bold text-gray-800">Check the filename!</p>
+                    <p className="text-sm mt-1">Make sure the file is named exactly: <br/><code className="bg-gray-100 px-2 py-1 rounded text-red-600 font-mono text-xs">{dataFileName}</code></p>
+                 </div>
+              </div>
+              <div className="flex gap-3">
+                 <div className="bg-teal-100 text-teal-800 w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0">3</div>
+                 <p className="text-sm pt-1">Upload this file to your website's <code>public</code> folder (Github).</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button 
+                onClick={() => setShowExportGuide(false)}
+                className="px-4 py-2 text-gray-500 hover:text-gray-700 font-medium"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  performExport();
+                  setShowExportGuide(false);
+                }}
+                className="px-4 py-2 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700 flex items-center gap-2"
+              >
+                <Download size={18}/> Download Data
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="mb-8 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
@@ -82,20 +145,47 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
         </div>
         
         {/* Publication Area */}
-        <div className="mt-6 bg-orange-50 border border-orange-200 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-start gap-3">
-                <AlertCircle className="text-orange-600 mt-1" size={24}/>
-                <div>
-                    <h3 className="font-bold text-orange-800">Publishing Changes</h3>
-                    <p className="text-sm text-orange-700">Whenever you add lessons or change assignments, you must <strong>Export Data</strong> and upload the file to your server.</p>
+        <div className="mt-6 bg-orange-50 border border-orange-200 rounded-xl p-4 flex flex-col gap-4">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="flex items-start gap-3">
+                    <div className="bg-orange-100 p-2 rounded-full text-orange-600 mt-1">
+                        <UploadCloud size={20}/>
+                    </div>
+                    <div>
+                        <h3 className="font-bold text-orange-800">Publish Changes</h3>
+                        <p className="text-sm text-orange-700">Any changes are only visible after you update the website data.</p>
+                    </div>
                 </div>
+                <button 
+                    onClick={() => setShowExportGuide(true)}
+                    className="flex items-center gap-2 bg-white text-orange-700 border border-orange-300 px-4 py-2 rounded-lg font-bold hover:bg-orange-100 shadow-sm shrink-0"
+                >
+                    <Download size={18}/> Export Website Data
+                </button>
             </div>
-            <button 
-                onClick={handleExportData}
-                className="flex items-center gap-2 bg-white text-orange-700 border border-orange-300 px-4 py-2 rounded-lg font-bold hover:bg-orange-100 shadow-sm shrink-0"
-            >
-                <Download size={18}/> Export Website Data
-            </button>
+
+            {/* Advanced File Settings */}
+            <div className="border-t border-orange-200 pt-3 flex items-center gap-2 text-sm text-orange-800">
+                <Settings size={14} />
+                <span>Current Data File:</span>
+                {isEditingFilename ? (
+                    <div className="flex items-center gap-2">
+                        <input 
+                            type="text" 
+                            value={dataFileName} 
+                            onChange={(e) => setDataFileName(e.target.value)}
+                            className="px-2 py-1 rounded border border-orange-300 text-gray-700 focus:outline-none focus:border-orange-500"
+                        />
+                        <button onClick={() => setIsEditingFilename(false)} className="text-teal-600 hover:underline">Done</button>
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-2">
+                        <code className="bg-white/50 px-2 py-0.5 rounded font-mono font-bold">{dataFileName}</code>
+                        <button onClick={() => setIsEditingFilename(true)} className="text-orange-600 hover:text-orange-900 underline text-xs">Change Filename</button>
+                    </div>
+                )}
+                <span className="text-xs text-orange-600/70 ml-2 hidden md:inline">(Only change this if you are managing multiple class files)</span>
+            </div>
         </div>
       </header>
 

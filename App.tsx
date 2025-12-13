@@ -67,21 +67,23 @@ const AppLogic: React.FC = () => {
   // Check for Static Data (student_data.json) & URL params
   useEffect(() => {
     const init = async () => {
-        // 1. Check URL for studentId
+        // 1. Check URL for studentId AND custom data file
         const urlParams = new URLSearchParams(window.location.search);
         const sId = urlParams.get('studentId');
+        // Default to student_data.json, but allow overriding via ?data=my_class.json
+        const dataFileName = urlParams.get('data') || 'student_data.json';
         
         // 2. Attempt to fetch static data (Deployed Mode)
         // We add a timestamp query param to bypass browser caching (critical for file-based CMS)
         try {
-            const res = await fetch(`/student_data.json?v=${new Date().getTime()}`);
+            const res = await fetch(`/${dataFileName}?v=${new Date().getTime()}`);
             if (res.ok) {
                 const data: ClassroomData = await res.json();
-                console.log("Static student data loaded", data);
+                console.log(`Static data loaded from ${dataFileName}`, data);
                 // Load data into context (sets isReadOnly=true)
                 loadStaticData(data);
             } else {
-                console.warn("student_data.json not found (404) or failed to load.");
+                console.warn(`${dataFileName} not found (404) or failed to load.`);
             }
         } catch (e) {
             console.log("Fetch error (offline/local). Using local DB data.");
