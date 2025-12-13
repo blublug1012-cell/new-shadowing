@@ -9,8 +9,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script>
-      // CRITICAL FIX: Shim process variable for browser environments
-      // This prevents "Uncaught ReferenceError: process is not defined" white screen crashes.
+      // Keep simple process shim just in case, but rely on import.meta.env for the app logic
       window.process = window.process || { env: {} };
     </script>
   <script type="importmap">
