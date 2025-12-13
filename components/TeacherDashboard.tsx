@@ -51,7 +51,7 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     
-    alert("Data file generated successfully!\n\nNext Step: Replace the 'student_data.json' in your 'public' folder and deploy your site.");
+    alert("Data file generated successfully!\n\nNext Step: Place 'student_data.json' in your 'public' folder and deploy.");
   };
 
   return (
@@ -92,7 +92,7 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
                <li><strong>Generate Data:</strong> Click the purple <strong>"Generate Website Data"</strong> button above. This downloads a file called <code>student_data.json</code>.
                    <br/><span className="text-xs text-blue-600 opacity-80">(Note: This file contains ALL history. It is a full backup of all students and lessons.)</span>
                </li>
-               <li><strong>Deploy:</strong> Replace the file in your project's <code>public/</code> folder with this new file, then update your website (e.g., git push).</li>
+               <li><strong>Deploy:</strong> Ensure a folder named <code>public</code> exists in your project root. Place the file inside it, then update your website (e.g., git push).</li>
                <li><strong>Done:</strong> Students just need to refresh their page. Their ID will now show the new content plus all history.</li>
             </ol>
           </div>
