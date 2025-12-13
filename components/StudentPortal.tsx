@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import { Lesson } from '../types';
-import { ArrowLeft, Play, Pause, Download, Volume2, User, FileJson, Clock, BookOpen, Trash2 } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Download, Volume2, User, FileJson, Clock, BookOpen, Trash2, Printer } from 'lucide-react';
 
 interface Props {
   onLogout: () => void;
@@ -44,34 +44,8 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage }) => {
     audio.onended = () => setPlayingSentenceId(null);
   };
 
-  const handleDownloadPDF = async () => {
-    // We use a specific ID to capture the content area
-    const element = document.getElementById('printable-lesson-content');
-    if (!element) return;
-
-    // @ts-ignore
-    if (typeof window.html2canvas === 'undefined' || typeof window.jspdf === 'undefined') {
-      alert("PDF libraries loading. Please wait...");
-      return;
-    }
-
-    try {
-       // @ts-ignore
-      const canvas = await window.html2canvas(element, { scale: 2 });
-      const imgData = canvas.toDataURL('image/png');
-      
-      // @ts-ignore
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`${activeLesson?.title || 'Lesson'}.pdf`);
-    } catch (e) {
-      console.error(e);
-      alert("Failed to generate PDF.");
-    }
+  const handlePrint = () => {
+    window.print();
   };
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
@@ -85,8 +59,41 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage }) => {
   // Lesson Detail View
   if (activeLesson) {
     return (
-      <div className="min-h-screen bg-gray-50 pb-20">
-        <div className="bg-white shadow-sm sticky top-0 z-10 px-4 py-3 flex justify-between items-center">
+      <div className="min-h-screen bg-gray-50 pb-20 print:bg-white print:pb-0">
+        {/* CSS for Print Optimization */}
+        <style>{`
+          @media print {
+            body * {
+              visibility: hidden;
+            }
+            #printable-area, #printable-area * {
+              visibility: visible;
+            }
+            #printable-area {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 100%;
+              margin: 0;
+              padding: 0;
+              box-shadow: none;
+              border: none;
+            }
+            .print-hidden {
+              display: none !important;
+            }
+            /* Prevent breaking a sentence block in half */
+            .sentence-block {
+              break-inside: avoid;
+              page-break-inside: avoid;
+              border-bottom: 1px solid #eee;
+              padding-bottom: 1rem;
+              margin-bottom: 1rem;
+            }
+          }
+        `}</style>
+
+        <div className="bg-white shadow-sm sticky top-0 z-10 px-4 py-3 flex justify-between items-center print:hidden">
           <button 
             onClick={() => setActiveLesson(null)}
             className="flex items-center gap-2 text-gray-600 hover:text-teal-600 font-medium"
@@ -95,21 +102,22 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage }) => {
           </button>
           <div className="flex gap-2">
             <button 
-              onClick={handleDownloadPDF}
+              onClick={handlePrint}
               className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2 rounded-full text-sm hover:bg-teal-700 shadow-sm"
             >
-              <Download size={16} /> Save PDF
+              <Printer size={16} /> Print / Save PDF
             </button>
           </div>
         </div>
 
-        <div className="max-w-3xl mx-auto p-4 md:p-8">
-          <div id="printable-lesson-content" className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
+        <div className="max-w-3xl mx-auto p-4 md:p-8 print:max-w-none print:p-0">
+          <div id="printable-area" className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 print:shadow-none print:border-none">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">{activeLesson.title}</h1>
             <p className="text-gray-500 mb-8 text-sm">Created: {new Date(activeLesson.createdAt).toLocaleDateString()}</p>
             
             {activeLesson.mediaUrl && (
-              <div className="mb-8 rounded-xl overflow-hidden shadow-md bg-black">
+              // Added 'print-hidden' class here to hide video/image in PDF
+              <div className="mb-8 rounded-xl overflow-hidden shadow-md bg-black print-hidden">
                  {activeLesson.mediaType === 'youtube' ? (
                    <div className="relative pt-[56.25%] w-full">
                      <iframe 
@@ -130,7 +138,8 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage }) => {
 
             <div className="space-y-8">
               {activeLesson.sentences.map((sentence) => (
-                <div key={sentence.id} className="group">
+                // Added 'sentence-block' to prevent page break inside a sentence
+                <div key={sentence.id} className="group sentence-block">
                   {/* Words Row */}
                   <div className="flex flex-wrap gap-x-3 gap-y-4 mb-3 items-end">
                     {sentence.words.map((word, idx) => {
@@ -150,25 +159,25 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage }) => {
                   </div>
                   
                   {/* Translation & Audio */}
-                  <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3 group-hover:bg-teal-50 transition-colors">
+                  <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3 group-hover:bg-teal-50 transition-colors print:bg-transparent print:p-0 print:block">
                     <p className="text-gray-700 italic font-medium">{sentence.english}</p>
                     {sentence.audioBase64 ? (
                       <button
-                        // Use class to hide from PDF if needed, but here we keep structure simple
-                        data-html2canvas-ignore="true" 
                         onClick={() => handlePlayAudio(sentence.audioBase64, sentence.id)}
-                        className={`p-3 rounded-full shadow-sm transition-all ${playingSentenceId === sentence.id ? 'bg-teal-500 text-white ring-2 ring-teal-300' : 'bg-white text-teal-600 hover:bg-teal-100'}`}
+                        // Added 'print-hidden' to hide audio buttons in PDF
+                        className={`p-3 rounded-full shadow-sm transition-all print-hidden ${playingSentenceId === sentence.id ? 'bg-teal-500 text-white ring-2 ring-teal-300' : 'bg-white text-teal-600 hover:bg-teal-100'}`}
                       >
                         {playingSentenceId === sentence.id ? <Pause size={20} fill="currentColor" /> : <Volume2 size={20} />}
                       </button>
-                    ) : (
-                        // If no audio (e.g. shared via link), show disabled icon or nothing
-                         null
-                    )}
+                    ) : null}
                   </div>
-                  <div className="h-px bg-gray-100 mt-8 w-full"></div>
+                  <div className="h-px bg-gray-100 mt-8 w-full print:hidden"></div>
                 </div>
               ))}
+            </div>
+            
+            <div className="mt-8 pt-4 border-t border-gray-200 text-center text-xs text-gray-400 hidden print:block">
+               Generated by YuetYu Tutor
             </div>
           </div>
         </div>
