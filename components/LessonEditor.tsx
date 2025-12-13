@@ -3,7 +3,7 @@ import { useData } from '../contexts/DataContext';
 import { generateCantoneseLesson } from '../services/geminiService';
 import { Lesson, Sentence, AppMode } from '../types';
 import AudioRecorder from './AudioRecorder';
-import { ArrowLeft, Wand2, Save, Loader2, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Wand2, Save, Loader2, Image as ImageIcon, Youtube } from 'lucide-react';
 
 interface Props {
   onNavigate: (mode: AppMode) => void;
@@ -16,7 +16,14 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
   // Form State
   const [title, setTitle] = useState(editLesson?.title || '');
   const [inputText, setInputText] = useState('');
+  
+  // Media State
+  const [mediaType, setMediaType] = useState<'image' | 'youtube'>(
+    editLesson?.mediaType === 'youtube' ? 'youtube' : 'image'
+  );
   const [mediaUrl, setMediaUrl] = useState(editLesson?.mediaUrl || '');
+  const [youtubeInput, setYoutubeInput] = useState(editLesson?.mediaType === 'youtube' ? editLesson.mediaUrl : '');
+
   const [sentences, setSentences] = useState<Sentence[]>(editLesson?.sentences || []);
   
   // UI State
@@ -31,21 +38,44 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
       setSentences(generatedSentences);
       setStep(2);
     } catch (error: any) {
-      // Display the actual error message from the service
       alert(`Error: ${error.message}`);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleMediaUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 1024 * 1024 * 2) { // 2MB limit check
+         alert("Image is too large. Please use an image under 2MB to keep the data file small.");
+         return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         setMediaUrl(reader.result as string);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  // Extract video ID and convert to embed URL
+  const handleYoutubeChange = (url: string) => {
+    setYoutubeInput(url);
+    if (!url) {
+      setMediaUrl('');
+      return;
+    }
+
+    // Simple regex to extract ID from standard youtube URLs
+    // Supports: youtube.com/watch?v=ID, youtu.be/ID, youtube.com/embed/ID
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+
+    if (match && match[2].length === 11) {
+      setMediaUrl(`https://www.youtube.com/embed/${match[2]}`);
+    } else {
+      // Do not set mediaURL yet if invalid, wait for user to fix
     }
   };
 
@@ -72,8 +102,8 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
       id: editLesson?.id || `lesson-${Date.now()}`,
       title,
       createdAt: editLesson?.createdAt || Date.now(),
-      mediaUrl,
-      mediaType: mediaUrl ? (mediaUrl.startsWith('data:video') ? 'video' : 'image') : undefined,
+      mediaUrl: mediaUrl,
+      mediaType: mediaUrl ? mediaType : undefined,
       sentences
     };
 
@@ -132,21 +162,54 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
         <div className="space-y-8 animate-fade-in">
           {/* Media Section */}
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-              <ImageIcon size={16} /> Lesson Media (Optional)
-            </h3>
-            <div className="flex gap-4 items-center">
-              <input type="file" accept="image/*,video/*" onChange={handleMediaUpload} className="text-sm text-gray-500" />
+            <h3 className="text-sm font-bold text-gray-700 mb-3">Lesson Media (Optional)</h3>
+            
+            <div className="flex gap-4 mb-4">
+               <button 
+                 onClick={() => { setMediaType('image'); setMediaUrl(''); setYoutubeInput(''); }}
+                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${mediaType === 'image' ? 'bg-teal-600 text-white shadow' : 'bg-white text-gray-600 border'}`}
+               >
+                 <ImageIcon size={16} /> Upload Image
+               </button>
+               <button 
+                 onClick={() => { setMediaType('youtube'); setMediaUrl(''); }}
+                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${mediaType === 'youtube' ? 'bg-red-600 text-white shadow' : 'bg-white text-gray-600 border'}`}
+               >
+                 <Youtube size={16} /> YouTube Video
+               </button>
+            </div>
+
+            <div className="flex flex-col md:flex-row gap-4 items-start">
+              <div className="flex-1 w-full">
+                {mediaType === 'image' ? (
+                  <div className="space-y-2">
+                    <input type="file" accept="image/*" onChange={handleImageUpload} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100"/>
+                    <p className="text-xs text-gray-400">Max size: 2MB. Larger images will bloat the data file.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <input 
+                      type="text" 
+                      value={youtubeInput}
+                      onChange={(e) => handleYoutubeChange(e.target.value)}
+                      placeholder="Paste YouTube Link (e.g. https://www.youtube.com/watch?v=...)"
+                      className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 outline-none"
+                    />
+                    <p className="text-xs text-gray-400">Paste the full link. We will handle the embedding.</p>
+                  </div>
+                )}
+              </div>
+
               {mediaUrl && (
-                <div className="relative h-20 w-20 bg-gray-200 rounded overflow-hidden">
-                   {mediaUrl.startsWith('data:video') ? (
-                     <video src={mediaUrl} className="h-full w-full object-cover" />
+                <div className="relative h-32 w-48 bg-black rounded-lg overflow-hidden shadow-md shrink-0 border border-gray-200">
+                   {mediaType === 'youtube' ? (
+                      <iframe src={mediaUrl} className="w-full h-full" title="Preview" frameBorder="0" allowFullScreen></iframe>
                    ) : (
                      <img src={mediaUrl} alt="Preview" className="h-full w-full object-cover" />
                    )}
                    <button 
-                     onClick={() => setMediaUrl('')} 
-                     className="absolute top-0 right-0 bg-red-500 text-white p-1 rounded-bl-lg text-xs"
+                     onClick={() => { setMediaUrl(''); setYoutubeInput(''); }} 
+                     className="absolute top-1 right-1 bg-gray-900/80 text-white p-1 rounded-full text-xs hover:bg-red-600 transition"
                    >
                      ✕
                    </button>
@@ -182,7 +245,7 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
                             ))}
                           </select>
                         ) : (
-                          <div className="h-5"></div> /* Placeholder for alignment if needed, or remove for compact */
+                          <div className="h-5"></div> /* Placeholder for alignment */
                         )}
                         <span className="text-xl font-serif text-gray-800">{word.char}</span>
                       </div>
@@ -211,7 +274,7 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
             ))}
           </div>
 
-          <div className="sticky bottom-4 bg-white p-4 shadow-lg rounded-xl border border-gray-200 flex justify-end gap-4">
+          <div className="sticky bottom-4 bg-white p-4 shadow-lg rounded-xl border border-gray-200 flex justify-end gap-4 z-50">
              <button
                onClick={() => setStep(1)}
                className="px-6 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium"

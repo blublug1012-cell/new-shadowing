@@ -51,7 +51,7 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     
-    alert("Data file generated successfully!\n\nNext Step: Place 'student_data.json' in your 'public' folder and deploy.");
+    alert("Data file generated successfully!\n\nThis file is now small because videos are links.\nYou can easily upload it to GitHub.");
   };
 
   return (
@@ -88,12 +88,12 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
           <div>
             <h3 className="font-bold text-blue-800 text-lg mb-2">How to update homework for students?</h3>
             <ol className="list-decimal ml-5 space-y-2 text-sm text-blue-900">
-               <li><strong>Assign Work:</strong> Create lessons and assign them to students below. Your local browser saves everything automatically.</li>
-               <li><strong>Generate Data:</strong> Click the purple <strong>"Generate Website Data"</strong> button above. This downloads a file called <code>student_data.json</code>.
-                   <br/><span className="text-xs text-blue-600 opacity-80">(Note: This file contains ALL history. It is a full backup of all students and lessons.)</span>
+               <li><strong>Create & Assign:</strong> Create lessons (using YouTube links for video) and assign them to students.</li>
+               <li><strong>Generate Data:</strong> Click the purple <strong>"Generate Website Data"</strong> button.
+                   <br/><span className="text-xs text-blue-600 opacity-80">(Note: Since we use YouTube links now, this file is very small and won't crash your browser or GitHub.)</span>
                </li>
-               <li><strong>Deploy:</strong> Ensure a folder named <code>public</code> exists in your project root. Place the file inside it, then update your website (e.g., git push).</li>
-               <li><strong>Done:</strong> Students just need to refresh their page. Their ID will now show the new content plus all history.</li>
+               <li><strong>Deploy:</strong> Place `student_data.json` in your project's `public` folder and deploy.</li>
+               <li><strong>Done:</strong> Students refresh to see new content.</li>
             </ol>
           </div>
         </div>

@@ -16,8 +16,8 @@ export interface Lesson {
   id: string;
   title: string;
   createdAt: number;
-  mediaUrl?: string; // Optional image/video URL
-  mediaType?: 'image' | 'video';
+  mediaUrl?: string; // Optional image URL or YouTube Embed URL
+  mediaType?: 'image' | 'video' | 'youtube';
   sentences: Sentence[];
 }
 

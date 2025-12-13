@@ -106,8 +106,18 @@ const StudentPortal: React.FC<Props> = ({ importedPackage, onLogout }) => {
             <p className="text-gray-500 mb-8 text-sm">Created: {new Date(activeLesson.createdAt).toLocaleDateString()}</p>
             
             {activeLesson.mediaUrl && (
-              <div className="mb-8 rounded-xl overflow-hidden shadow-md">
-                 {activeLesson.mediaType === 'video' ? (
+              <div className="mb-8 rounded-xl overflow-hidden shadow-md bg-black">
+                 {activeLesson.mediaType === 'youtube' ? (
+                   <div className="relative pt-[56.25%] w-full">
+                     <iframe 
+                       src={activeLesson.mediaUrl} 
+                       className="absolute top-0 left-0 w-full h-full" 
+                       title="Lesson Video" 
+                       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                       allowFullScreen
+                     ></iframe>
+                   </div>
+                 ) : activeLesson.mediaType === 'video' ? (
                    <video src={activeLesson.mediaUrl} controls className="w-full max-h-[400px] object-cover" />
                  ) : (
                    <img src={activeLesson.mediaUrl} className="w-full max-h-[400px] object-cover" alt="Lesson context" />
