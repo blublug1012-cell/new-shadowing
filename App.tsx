@@ -72,16 +72,16 @@ const AppLogic: React.FC = () => {
         const sId = urlParams.get('studentId');
         
         // 2. Attempt to fetch static data (Deployed Mode)
-        // Note: Even if this fails (local dev), we proceed to check sId
+        // We add a timestamp query param to bypass browser caching (critical for file-based CMS)
         try {
-            const res = await fetch('/student_data.json');
+            const res = await fetch(`/student_data.json?v=${new Date().getTime()}`);
             if (res.ok) {
                 const data: ClassroomData = await res.json();
                 console.log("Static student data loaded", data);
                 // Load data into context (sets isReadOnly=true)
                 loadStaticData(data);
             } else {
-                console.log("No student_data.json found. Using local DB data.");
+                console.warn("student_data.json not found (404) or failed to load.");
             }
         } catch (e) {
             console.log("Fetch error (offline/local). Using local DB data.");

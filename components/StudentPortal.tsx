@@ -29,6 +29,7 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage, studentId }) 
   // VALIDATION: Check if student exists if ID is provided
   const currentStudent = studentId ? students.find(s => s.id === studentId) : null;
   const isInvalidStudent = studentId && !currentStudent;
+  const isDataMissing = students.length === 0;
 
   // Determine which lessons to show
   const displayedLessons = React.useMemo(() => {
@@ -84,21 +85,34 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage, studentId }) 
                 <div className="bg-red-100 text-red-500 p-4 rounded-full inline-block mb-4">
                     <AlertOctagon size={48} />
                 </div>
-                <h1 className="text-2xl font-bold text-gray-800 mb-2">Link Invalid or Expired</h1>
+                <h1 className="text-2xl font-bold text-gray-800 mb-2">
+                    {isDataMissing ? "Data File Missing" : "Student Not Found"}
+                </h1>
                 <p className="text-gray-600 mb-6">
-                    We could not find a student profile for this link. 
+                    {isDataMissing 
+                        ? "We could not load the classroom data." 
+                        : "We could not find a student profile matching this link."}
                 </p>
-                <div className="text-sm text-gray-400 bg-gray-50 p-3 rounded mb-6 text-left">
-                    <strong>Possible reasons:</strong>
-                    <ul className="list-disc pl-5 mt-1 space-y-1">
-                        <li>The teacher has updated the student list but hasn't uploaded the new data file yet.</li>
-                        <li>You are opening a link from a different device/browser in local test mode.</li>
-                        <li>The link is incomplete.</li>
-                    </ul>
+                
+                <div className="text-sm text-gray-500 bg-gray-50 p-4 rounded-lg text-left border border-gray-200">
+                    <strong>Troubleshooting:</strong>
+                    {isDataMissing ? (
+                         <ul className="list-disc pl-5 mt-2 space-y-2">
+                            <li>Check if <code>student_data.json</code> is uploaded to the root/public folder.</li>
+                            <li>Ensure the file name is exactly <code>student_data.json</code> (no numbers like (1)).</li>
+                            <li>If you just uploaded it, try refreshing in a minute.</li>
+                        </ul>
+                    ) : (
+                        <ul className="list-disc pl-5 mt-2 space-y-2">
+                            <li>The teacher may have updated the student list but hasn't uploaded the new data file yet.</li>
+                            <li>The link might be incomplete or copied incorrectly.</li>
+                        </ul>
+                    )}
                 </div>
+
                 <button 
                     onClick={onLogout}
-                    className="bg-gray-800 text-white px-6 py-2 rounded-lg font-bold hover:bg-gray-900"
+                    className="mt-6 bg-gray-800 text-white px-6 py-2 rounded-lg font-bold hover:bg-gray-900 transition"
                 >
                     Go to Home
                 </button>
