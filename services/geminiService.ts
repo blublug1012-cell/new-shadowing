@@ -1,14 +1,14 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Sentence, Word } from "../types";
 
-// Moved initialization inside the function to prevent crash on module load if process.env is unstable
 export const generateCantoneseLesson = async (text: string): Promise<Sentence[]> => {
-  // Safe access to API Key: Check both standard process.env and Vite's import.meta.env
-  // @ts-ignore
-  const apiKey = (typeof process !== 'undefined' ? process.env?.API_KEY : undefined) || (import.meta as any).env?.VITE_API_KEY;
+  // Access the key directly via process.env.API_KEY as per Google SDK guidelines.
+  // This works because vite.config.ts now defines this global constant at build time.
+  // @ts-ignore - Ignore TypeScript warning as we define this in vite.config.ts
+  const apiKey = process.env.API_KEY;
   
-  if (!apiKey) {
-    const msg = "System Error: API Key is missing. Please add VITE_API_KEY to your .env file or Netlify Environment Variables.";
+  if (!apiKey || apiKey === "undefined" || apiKey === "") {
+    const msg = "System Error: API Key is missing. \n\nIMPORTANT: If you just added the key to Netlify, you MUST trigger a NEW DEPLOY (Rebuild) for it to take effect. Environment variables are baked in at build time.";
     console.error(msg);
     throw new Error(msg);
   }
@@ -73,7 +73,7 @@ export const generateCantoneseLesson = async (text: string): Promise<Sentence[]>
 
     if (response.text) {
       let cleanText = response.text.trim();
-      // Remove markdown code blocks if present (common issue with LLM outputs)
+      // Remove markdown code blocks if present
       if (cleanText.startsWith('```json')) {
         cleanText = cleanText.replace(/^```json/, '').replace(/```$/, '');
       } else if (cleanText.startsWith('```')) {
@@ -82,7 +82,6 @@ export const generateCantoneseLesson = async (text: string): Promise<Sentence[]>
 
       try {
         const data = JSON.parse(cleanText);
-        // Ensure unique IDs if the model doesn't generate them well
         return data.map((s: any, idx: number) => ({
           ...s,
           id: s.id || `sent-${Date.now()}-${idx}`
@@ -95,7 +94,6 @@ export const generateCantoneseLesson = async (text: string): Promise<Sentence[]>
     }
   } catch (error: any) {
     console.error("Gemini API Error details:", error);
-    // Throw the actual error message so the UI can display it
     throw new Error(error.message || "Unknown API Error");
   }
 
