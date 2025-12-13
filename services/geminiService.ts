@@ -2,12 +2,11 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Sentence, Word } from "../types";
 
 export const generateCantoneseLesson = async (text: string): Promise<Sentence[]> => {
-  // ADAPTATION: We use import.meta.env.VITE_API_KEY which is the standard way Vite handles env vars.
-  // This bypasses the Netlify "Exposed secrets" build error caused by manual process.env polyfills.
+  // Use Vite's standard env var injection
   const apiKey = import.meta.env.VITE_API_KEY;
   
   if (!apiKey || apiKey === "undefined" || apiKey === "") {
-    const msg = "System Error: API Key is missing. \n\nPlease ensure you have set 'VITE_API_KEY' in your Netlify Environment Variables and triggered a RE-DEPLOY.";
+    const msg = "API Key Error: 'VITE_API_KEY' is missing.\n\nPlease check your Netlify Environment Variables.";
     console.error(msg);
     throw new Error(msg);
   }
