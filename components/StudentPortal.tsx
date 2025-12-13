@@ -1,17 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import { Lesson } from '../types';
-import { ArrowLeft, Play, Pause, Download, Volume2, User, FileJson, Clock, BookOpen, Trash2, Printer } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Download, Volume2, User, FileJson, Clock, BookOpen, Trash2, Printer, CheckCircle } from 'lucide-react';
 
 interface Props {
   onLogout: () => void;
   importMessage?: string;
+  studentId?: string; // Optional: Used to filter if in deployed mode
 }
 
-const StudentPortal: React.FC<Props> = ({ onLogout, importMessage }) => {
-  const { lessons, deleteLesson } = useData(); // Read directly from DB
+const StudentPortal: React.FC<Props> = ({ onLogout, importMessage, studentId }) => {
+  const { lessons, deleteLesson, students, isReadOnly } = useData();
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
-
+  
   // Audio Playback State
   const [playingSentenceId, setPlayingSentenceId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -24,6 +25,23 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage }) => {
         return () => clearTimeout(t);
     }
   }, [msg]);
+
+  // Determine which lessons to show
+  // If studentId is provided, find that student and show only their assigned lessons
+  // If not provided, show ALL lessons (fallback or old behavior)
+  const displayedLessons = React.useMemo(() => {
+    if (studentId) {
+        const student = students.find(s => s.id === studentId);
+        if (student) {
+            return lessons.filter(l => student.assignedLessonIds.includes(l.id));
+        }
+        // If student ID invalid, maybe show nothing? Or all? Let's show empty for security.
+        return [];
+    }
+    return lessons;
+  }, [lessons, students, studentId]);
+
+  const currentStudentName = studentId ? students.find(s => s.id === studentId)?.name : null;
 
   const handlePlayAudio = (base64: string | undefined, sentenceId: string) => {
     if (!base64) return;
@@ -50,6 +68,10 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage }) => {
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
+    if (isReadOnly) {
+        alert("Cannot delete lessons in Student View.");
+        return;
+    }
     if(confirm("Remove this lesson from your library?")) {
         await deleteLesson(id);
         if(activeLesson?.id === id) setActiveLesson(null);
@@ -192,10 +214,10 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage }) => {
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
-                <BookOpen size={24}/> My Library
+                <BookOpen size={24}/> {currentStudentName ? `${currentStudentName}'s Library` : 'Student Library'}
             </h1>
             <p className="opacity-90 text-sm mt-1">
-               {lessons.length} Lesson{lessons.length !== 1 ? 's' : ''} Saved
+               {displayedLessons.length} Lesson{displayedLessons.length !== 1 ? 's' : ''} Assigned
             </p>
           </div>
           <button onClick={onLogout} className="text-orange-100 hover:text-white underline text-sm">Exit</button>
@@ -211,18 +233,17 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage }) => {
             </div>
         )}
 
-        {lessons.length === 0 ? (
+        {displayedLessons.length === 0 ? (
            <div className="bg-white p-12 rounded-xl shadow-sm text-center text-gray-500 border-2 border-dashed border-gray-300">
              <div className="bg-gray-50 p-4 rounded-full inline-block mb-3">
                  <BookOpen size={32} className="text-gray-400"/>
              </div>
-             <h3 className="text-lg font-bold text-gray-600 mb-2">Library is Empty</h3>
-             <p>Ask your teacher for a <strong>Share Link</strong> or a <strong>Lesson File</strong>.</p>
-             <p className="text-sm mt-4 text-gray-400">Once you open a link, the lesson will appear here.</p>
+             <h3 className="text-lg font-bold text-gray-600 mb-2">No Lessons Assigned</h3>
+             <p>Hi {currentStudentName || 'Student'}, your teacher hasn't assigned any lessons yet.</p>
            </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {lessons.map(lesson => (
+            {displayedLessons.map(lesson => (
               <div
                 key={lesson.id}
                 onClick={() => setActiveLesson(lesson)}
@@ -230,13 +251,16 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage }) => {
               >
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="text-lg font-bold text-gray-800 group-hover:text-orange-600">{lesson.title}</h3>
-                  <button 
-                    onClick={(e) => handleDelete(e, lesson.id)}
-                    className="text-gray-300 hover:text-red-500 p-1"
-                    title="Remove from library"
-                  >
-                    <Trash2 size={16}/>
-                  </button>
+                  {/* Delete button only shown if NOT read only (meaning local mode) */}
+                  {!isReadOnly && (
+                    <button 
+                        onClick={(e) => handleDelete(e, lesson.id)}
+                        className="text-gray-300 hover:text-red-500 p-1"
+                        title="Remove from library"
+                    >
+                        <Trash2 size={16}/>
+                    </button>
+                  )}
                 </div>
                 <div className="text-xs text-gray-400 mb-2 flex gap-2">
                     <span>{new Date(lesson.createdAt).toLocaleDateString()}</span>
@@ -254,8 +278,5 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage }) => {
     </div>
   );
 };
-
-// Helper icon
-import { CheckCircle } from 'lucide-react';
 
 export default StudentPortal;

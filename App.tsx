@@ -3,8 +3,8 @@ import { DataProvider, useData } from './contexts/DataContext';
 import TeacherDashboard from './components/TeacherDashboard';
 import LessonEditor from './components/LessonEditor';
 import StudentPortal from './components/StudentPortal';
-import { AppMode, Lesson } from './types';
-import { GraduationCap, BookOpen, AlertTriangle, Loader2, UploadCloud, Lock, PlayCircle } from 'lucide-react';
+import { AppMode, Lesson, ClassroomData } from './types';
+import { GraduationCap, BookOpen, AlertTriangle, Loader2, UploadCloud, Lock, PlayCircle, Info } from 'lucide-react';
 // @ts-ignore
 import LZString from 'lz-string';
 
@@ -52,7 +52,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 
 // Separate component to use hook
 const AppLogic: React.FC = () => {
-  const { isLoading, addLesson } = useData();
+  const { isLoading, addLesson, loadStaticData } = useData();
   const [mode, setMode] = useState<AppMode>(AppMode.ROLE_SELECT);
   const [editingLesson, setEditingLesson] = useState<Lesson | undefined>(undefined);
   
@@ -62,46 +62,49 @@ const AppLogic: React.FC = () => {
   const [pinError, setPinError] = useState('');
   
   // Student State
-  const [importMessage, setImportMessage] = useState('');
+  const [studentIdFromUrl, setStudentIdFromUrl] = useState<string | null>(null);
 
-  // Handle URL Hashes for Sharing
+  // Check for Static Data (student_data.json) & URL params
   useEffect(() => {
-    const processHash = async () => {
-      const hash = window.location.hash;
-      
-      // Check for shared lesson link: #/share/COMPRESSED_DATA
-      if (hash.startsWith('#/share/')) {
+    const init = async () => {
+        // 1. Check URL for studentId
+        const urlParams = new URLSearchParams(window.location.search);
+        const sId = urlParams.get('studentId');
+        
+        // 2. Attempt to fetch static data (Deployed Mode)
         try {
-          const compressed = hash.replace('#/share/', '');
-          const decompressed = LZString.decompressFromEncodedURIComponent(compressed);
-          
-          if (decompressed) {
-            const lesson = JSON.parse(decompressed) as Lesson;
-            
-            // SAVE TO DB automatically
-            await addLesson(lesson);
-            
-            setImportMessage(`Success! Lesson "${lesson.title}" has been added to your library.`);
-            window.location.hash = ''; // Clear hash
-            setMode(AppMode.STUDENT_PORTAL);
-          }
+            const res = await fetch('/student_data.json');
+            if (res.ok) {
+                const data: ClassroomData = await res.json();
+                console.log("Static student data loaded", data);
+                
+                // Load data into context (sets isReadOnly=true)
+                loadStaticData(data);
+                
+                // If we have a student ID, auto-enter
+                if (sId) {
+                    setStudentIdFromUrl(sId);
+                    setMode(AppMode.STUDENT_PORTAL);
+                }
+            } else {
+                console.log("No student_data.json found. Running in Teacher/Local Mode.");
+            }
         } catch (e) {
-          console.error("Failed to parse shared link", e);
-          alert("Invalid or broken share link.");
+            console.log("Failed to fetch static data (likely local mode or offline).");
         }
-      }
-
-      // Teacher login shortcut
-      if (hash === '#/teacher') {
-        window.location.hash = ''; 
-        setIsTeacherLoginVisible(true);
-      }
+        
+        // Handle teacher shortcut
+        if (window.location.hash === '#/teacher') {
+            window.location.hash = '';
+            setIsTeacherLoginVisible(true);
+        }
     };
-
+    
+    // Only run if not already loading (initial mount)
     if (!isLoading) {
-      processHash();
+        init();
     }
-  }, [isLoading, addLesson]);
+  }, [isLoading]);
 
   const navigate = (newMode: AppMode, data?: any) => {
     setMode(newMode);
@@ -131,48 +134,11 @@ const AppLogic: React.FC = () => {
     }
   };
 
-  const handleManualUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const json = JSON.parse(e.target?.result as string);
-        
-        // Handle single lesson file import
-        if (json.title && json.sentences) {
-           await addLesson(json);
-           setImportMessage(`Lesson "${json.title}" imported!`);
-           setMode(AppMode.STUDENT_PORTAL);
-           return;
-        }
-
-        // Handle bulk file (legacy or backup)
-        if (json.lessons && Array.isArray(json.lessons)) {
-             let count = 0;
-             for (const l of json.lessons) {
-               await addLesson(l);
-               count++;
-             }
-             setImportMessage(`${count} lessons imported.`);
-             setMode(AppMode.STUDENT_PORTAL);
-        } else {
-          alert("Invalid file format.");
-        }
-      } catch (err) {
-        console.error(err);
-        alert("Error reading file.");
-      }
-    };
-    reader.readAsText(file);
-  };
-
   if (isLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
         <Loader2 className="animate-spin text-teal-600 mb-4" size={48} />
-        <p className="text-gray-500 font-medium">Loading your library...</p>
+        <p className="text-gray-500 font-medium">Loading...</p>
       </div>
     );
   }
@@ -247,47 +213,25 @@ const AppLogic: React.FC = () => {
                   </div>
                   <div className="text-left">
                     <h3 className="font-bold text-gray-800">I am a Teacher</h3>
-                    <p className="text-sm text-gray-500">Create content & share links</p>
+                    <p className="text-sm text-gray-500">Create content & manage students</p>
                   </div>
                 </button>
 
                 <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-200"></div>
-                  </div>
-                  <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-white text-gray-500">Student Access</span>
-                  </div>
+                   <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
+                   <div className="relative flex justify-center"><span className="bg-white px-2 text-sm text-gray-500">Student Access</span></div>
                 </div>
 
-                {/* Student Entry - DIRECT LIBRARY ACCESS */}
-                <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm text-center">
-                   <div className="mb-4">
-                     <h3 className="font-bold text-xl text-gray-800">Student Area</h3>
-                     <p className="text-sm text-gray-500 mt-1">Access your saved lessons</p>
-                   </div>
-                   
-                   <button 
-                    onClick={() => setMode(AppMode.STUDENT_PORTAL)}
-                    className="w-full bg-orange-500 text-white py-4 rounded-xl font-bold hover:bg-orange-600 transition flex items-center justify-center gap-2 shadow-md hover:shadow-lg transform hover:-translate-y-1 mb-4"
-                  >
-                    <BookOpen size={24} />
-                    Enter My Library
-                  </button>
-
-                  <div className="text-xs text-gray-400 bg-gray-50 p-3 rounded-lg border border-gray-100 mb-4">
-                     <span className="font-semibold text-gray-600 block mb-1">How to add lessons?</span>
-                     Ask your teacher for a <strong>Link</strong> or a <strong>File</strong>.<br/>
-                     When you click the link, the lesson is automatically added here.
-                  </div>
-
-                  <label 
-                    className="inline-flex items-center gap-2 text-xs text-teal-600 cursor-pointer hover:text-teal-800 font-medium py-2"
-                  >
-                    <UploadCloud size={14}/>
-                    <span>Have a file? Click to Import</span>
-                    <input type="file" className="hidden" accept=".json" onChange={handleManualUpload} />
-                  </label>
+                <div className="bg-gray-50 rounded-xl p-4 text-center border border-gray-200">
+                    <div className="text-gray-400 mb-2">
+                        <Info size={32} className="mx-auto"/>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-2">
+                        Students should use the <strong>personal link</strong> provided by the teacher to access their exercises directly.
+                    </p>
+                    <p className="text-xs text-gray-400">
+                        (If you are testing, please use the Teacher Dashboard to generate a student link)
+                    </p>
                 </div>
 
               </div>
@@ -305,7 +249,7 @@ const AppLogic: React.FC = () => {
         return (
           <StudentPortal 
             onLogout={() => navigate(AppMode.ROLE_SELECT)} 
-            importMessage={importMessage}
+            studentId={studentIdFromUrl || undefined}
           />
         );
         

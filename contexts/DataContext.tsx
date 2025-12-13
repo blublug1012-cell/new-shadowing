@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Lesson, Student } from '../types';
+import { Lesson, Student, ClassroomData } from '../types';
 import { dbService } from '../services/db';
 
 interface DataContextType {
   lessons: Lesson[];
   students: Student[];
   isLoading: boolean;
+  isReadOnly: boolean; // True if loaded from static JSON
+  loadStaticData: (data: ClassroomData) => void; // For Student Mode
   addLesson: (lesson: Lesson) => Promise<void>;
   updateLesson: (lesson: Lesson) => Promise<void>;
   deleteLesson: (id: string) => Promise<void>;
@@ -13,6 +15,7 @@ interface DataContextType {
   assignLesson: (studentId: string, lessonId: string) => Promise<void>;
   getStudentById: (id: string) => Student | undefined;
   getLessonById: (id: string) => Lesson | undefined;
+  exportSystemData: () => Promise<ClassroomData>; // For Teacher Export
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -23,10 +26,14 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isReadOnly, setIsReadOnly] = useState(false);
 
-  // Initialize DB and load data
+  // Initialize DB and load data normally (Teacher Mode default)
   useEffect(() => {
     const initData = async () => {
+      // If we are already in read-only mode (set by App.tsx detecting student link), don't load DB
+      if (isReadOnly) return;
+
       try {
         await dbService.init();
         
@@ -41,16 +48,33 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setStudents(loadedStudents);
       } catch (err) {
         console.error("Failed to initialize database:", err);
-        alert("Database error: Your browser might be in private mode or blocking storage.");
       } finally {
         setIsLoading(false);
       }
     };
 
     initData();
-  }, []);
+  }, [isReadOnly]);
+
+  // Called by App.tsx if it successfully fetches student_data.json
+  const loadStaticData = (data: ClassroomData) => {
+    setIsReadOnly(true);
+    setLessons(data.lessons || []);
+    setStudents(data.students || []);
+    setIsLoading(false);
+  };
+
+  const exportSystemData = async (): Promise<ClassroomData> => {
+    // Get fresh data from state
+    return {
+        generatedAt: Date.now(),
+        students: students,
+        lessons: lessons
+    };
+  };
 
   const addLesson = async (lesson: Lesson) => {
+    if (isReadOnly) return;
     try {
       await dbService.saveLesson(lesson);
       setLessons(prev => [lesson, ...prev]);
@@ -61,6 +85,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const updateLesson = async (updatedLesson: Lesson) => {
+    if (isReadOnly) return;
     try {
       await dbService.saveLesson(updatedLesson);
       setLessons(prev => prev.map(l => l.id === updatedLesson.id ? updatedLesson : l));
@@ -71,6 +96,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const deleteLesson = async (id: string) => {
+    if (isReadOnly) return;
     try {
       await dbService.deleteLesson(id);
       setLessons(prev => prev.filter(l => l.id !== id));
@@ -80,6 +106,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const addStudent = async (name: string) => {
+    if (isReadOnly) return;
     const newStudent: Student = {
       id: `student-${Date.now()}`,
       name,
@@ -94,6 +121,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const assignLesson = async (studentId: string, lessonId: string) => {
+    if (isReadOnly) return;
     const student = students.find(s => s.id === studentId);
     if (!student) return;
     
@@ -121,6 +149,9 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       lessons,
       students,
       isLoading,
+      isReadOnly,
+      loadStaticData,
+      exportSystemData,
       addLesson,
       updateLesson,
       deleteLesson,
