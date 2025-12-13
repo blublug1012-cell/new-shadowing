@@ -3,7 +3,7 @@ import { useData } from '../contexts/DataContext';
 import { generateCantoneseLesson } from '../services/geminiService';
 import { Lesson, Sentence, AppMode } from '../types';
 import AudioRecorder from './AudioRecorder';
-import { ArrowLeft, Wand2, Save, Loader2, Image as ImageIcon, Youtube } from 'lucide-react';
+import { ArrowLeft, Wand2, Save, Loader2, Image as ImageIcon, Youtube, MessageSquareText, Mic } from 'lucide-react';
 
 interface Props {
   onNavigate: (mode: AppMode) => void;
@@ -254,22 +254,51 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
                 </div>
 
                 {/* Translation Input */}
-                <input
-                  type="text"
-                  value={sentence.english}
-                  onChange={(e) => updateSentence(sentence.id, { english: e.target.value })}
-                  className="w-full text-sm text-gray-600 border-b border-gray-200 focus:border-teal-500 outline-none pb-1 mb-3"
-                  placeholder="English translation"
-                />
+                <div className="mb-3">
+                   <label className="text-xs text-gray-400 uppercase font-bold">English Translation</label>
+                   <input
+                      type="text"
+                      value={sentence.english}
+                      onChange={(e) => updateSentence(sentence.id, { english: e.target.value })}
+                      className="w-full text-sm text-gray-600 border-b border-gray-200 focus:border-teal-500 outline-none pb-1"
+                      placeholder="English translation"
+                    />
+                </div>
 
-                {/* Recording Control */}
-                <div className="flex items-center justify-between bg-gray-50 p-2 rounded-lg">
-                  <span className="text-xs font-semibold text-gray-500 uppercase">Teacher Audio</span>
+                {/* Main Audio Recording */}
+                <div className="flex items-center justify-between bg-gray-50 p-2 rounded-lg mb-3">
+                  <span className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-1">
+                      <Mic size={14}/> Reading Audio
+                  </span>
                   <AudioRecorder 
                     existingAudio={sentence.audioBase64} 
                     onSave={(base64) => updateSentence(sentence.id, { audioBase64: base64 })} 
                   />
                 </div>
+
+                {/* NEW: Explanation Section */}
+                <div className="bg-orange-50 p-3 rounded-lg border border-orange-100">
+                    <div className="flex items-center gap-2 mb-2">
+                        <MessageSquareText size={16} className="text-orange-600"/>
+                        <span className="text-xs font-bold text-orange-800 uppercase">Vocabulary & Explanation (Optional)</span>
+                    </div>
+                    
+                    <textarea
+                        value={sentence.explanationText || ''}
+                        onChange={(e) => updateSentence(sentence.id, { explanationText: e.target.value })}
+                        className="w-full text-sm p-2 bg-white border border-orange-200 rounded text-gray-700 outline-none focus:ring-1 focus:ring-orange-400 mb-2 resize-y min-h-[60px]"
+                        placeholder="Explain difficult words or grammar here (press Enter for new lines)..."
+                    />
+                    
+                    <div className="flex items-center justify-between border-t border-orange-100 pt-2">
+                         <span className="text-xs text-orange-600">Explanation Audio</span>
+                         <AudioRecorder 
+                            existingAudio={sentence.explanationAudio} 
+                            onSave={(base64) => updateSentence(sentence.id, { explanationAudio: base64 })} 
+                         />
+                    </div>
+                </div>
+
               </div>
             ))}
           </div>

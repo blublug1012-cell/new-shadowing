@@ -9,7 +9,9 @@ export interface Sentence {
   id: string;
   words: Word[];
   english: string;
-  audioBase64?: string; // Teacher's recording
+  audioBase64?: string; // Teacher's main reading recording
+  explanationText?: string; // Teacher's vocabulary/grammar explanation
+  explanationAudio?: string; // Teacher's explanation recording
 }
 
 export interface Lesson {

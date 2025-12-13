@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import { Lesson } from '../types';
-import { ArrowLeft, Play, Pause, Download, Volume2, User, FileJson, Clock, BookOpen, Trash2, Printer, CheckCircle, AlertOctagon } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Download, Volume2, User, FileJson, Clock, BookOpen, Trash2, Printer, CheckCircle, AlertOctagon, Lightbulb, GraduationCap } from 'lucide-react';
 
 interface Props {
   onLogout: () => void;
@@ -14,7 +14,7 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage, studentId }) 
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
   
   // Audio Playback State
-  const [playingSentenceId, setPlayingSentenceId] = useState<string | null>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null); // Changed from playingSentenceId to generic playingId
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Clear import message after a few seconds
@@ -42,23 +42,23 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage, studentId }) 
     return [];
   }, [lessons, currentStudent, studentId]);
 
-  const handlePlayAudio = (base64: string | undefined, sentenceId: string) => {
+  const handlePlayAudio = (base64: string | undefined, uniquePlayId: string) => {
     if (!base64) return;
     
     if (audioRef.current) {
       audioRef.current.pause();
-      if (playingSentenceId === sentenceId) {
-        setPlayingSentenceId(null);
+      if (playingId === uniquePlayId) {
+        setPlayingId(null);
         return;
       }
     }
 
     const audio = new Audio(base64);
     audioRef.current = audio;
-    setPlayingSentenceId(sentenceId);
+    setPlayingId(uniquePlayId);
     
     audio.play();
-    audio.onended = () => setPlayingSentenceId(null);
+    audio.onended = () => setPlayingId(null);
   };
 
   const handlePrint = () => {
@@ -230,12 +230,38 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage, studentId }) 
                       <button
                         onClick={() => handlePlayAudio(sentence.audioBase64, sentence.id)}
                         // Added 'print-hidden' to hide audio buttons in PDF
-                        className={`p-3 rounded-full shadow-sm transition-all print-hidden ${playingSentenceId === sentence.id ? 'bg-teal-500 text-white ring-2 ring-teal-300' : 'bg-white text-teal-600 hover:bg-teal-100'}`}
+                        className={`p-3 rounded-full shadow-sm transition-all print-hidden ${playingId === sentence.id ? 'bg-teal-500 text-white ring-2 ring-teal-300' : 'bg-white text-teal-600 hover:bg-teal-100'}`}
                       >
-                        {playingSentenceId === sentence.id ? <Pause size={20} fill="currentColor" /> : <Volume2 size={20} />}
+                        {playingId === sentence.id ? <Pause size={20} fill="currentColor" /> : <Volume2 size={20} />}
                       </button>
                     ) : null}
                   </div>
+
+                  {/* TEACHER EXPLANATION SECTION - CONDITIONAL */}
+                  {(sentence.explanationText || sentence.explanationAudio) && (
+                      <div className="mt-4 ml-2 md:ml-6 p-4 bg-orange-50 border-l-4 border-orange-300 rounded-r-xl text-sm text-gray-700 flex gap-3 print:bg-transparent print:border-gray-300">
+                          <Lightbulb size={20} className="text-orange-500 shrink-0 mt-0.5 print:hidden"/>
+                          <div className="flex-1">
+                                {sentence.explanationText && (
+                                    <div className="whitespace-pre-wrap leading-relaxed mb-2 font-medium text-gray-800">
+                                        {sentence.explanationText}
+                                    </div>
+                                )}
+                                {sentence.explanationAudio && (
+                                    <div className="print:hidden">
+                                        <button 
+                                            onClick={() => handlePlayAudio(sentence.explanationAudio, `${sentence.id}-expl`)}
+                                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${playingId === `${sentence.id}-expl` ? 'bg-orange-200 text-orange-800' : 'bg-white text-orange-600 border border-orange-200 hover:bg-orange-100'}`}
+                                        >
+                                            {playingId === `${sentence.id}-expl` ? <Pause size={14} /> : <GraduationCap size={14} />}
+                                            {playingId === `${sentence.id}-expl` ? 'Playing Note...' : 'Teacher\'s Note'}
+                                        </button>
+                                    </div>
+                                )}
+                          </div>
+                      </div>
+                  )}
+
                   <div className="h-px bg-gray-100 mt-8 w-full print:hidden"></div>
                 </div>
               ))}
