@@ -41,14 +41,16 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
 
   return (
     <div className="max-w-6xl mx-auto p-6">
-      <header className="mb-8 flex justify-between items-center">
+      <header className="mb-8 flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">Teacher Dashboard</h1>
-          <p className="text-gray-600">Create, manage, and view history of your lessons</p>
+          <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
+             Teacher Dashboard
+          </h1>
+          <p className="text-gray-600 mt-1">Manage your students and access your <b>Lesson History</b> below.</p>
         </div>
         <button 
           onClick={handleCreateLesson}
-          className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition"
+          className="flex items-center gap-2 bg-teal-600 text-white px-5 py-3 rounded-xl hover:bg-teal-700 transition shadow-md font-medium"
         >
           <Plus size={20} />
           Create New Lesson
@@ -61,7 +63,7 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
           className={`pb-2 px-4 font-medium transition ${activeTab === 'lessons' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-gray-500'}`}
         >
           <div className="flex items-center gap-2">
-            <History size={18} /> Lesson History ({lessons.length})
+            <History size={18} /> History & Lessons ({lessons.length})
           </div>
         </button>
         <button
@@ -83,7 +85,7 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
             </div>
           )}
           {lessons.map(lesson => (
-            <div key={lesson.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col">
+            <div key={lesson.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex flex-col hover:shadow-md transition-shadow">
               <div className="flex justify-between items-start mb-2">
                 <h3 className="font-bold text-lg text-gray-800 line-clamp-1">{lesson.title}</h3>
                 <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">{new Date(lesson.createdAt).toLocaleDateString()}</span>
@@ -91,20 +93,20 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
               <p className="text-sm text-gray-500 mb-4 line-clamp-2">
                 {lesson.sentences[0]?.english || "No content preview"}
               </p>
-              <div className="mt-auto flex justify-end gap-2">
+              <div className="mt-auto flex justify-end gap-2 border-t border-gray-100 pt-3">
                 <button 
                   onClick={() => deleteLesson(lesson.id)}
-                  className="p-2 text-red-500 hover:bg-red-50 rounded-full"
-                  title="Delete"
+                  className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                  title="Delete from History"
                 >
                   <Trash2 size={18} />
                 </button>
                 <button 
                   onClick={() => handleEditLesson(lesson)}
-                  className="p-2 text-blue-500 hover:bg-blue-50 rounded-full"
-                  title="Edit"
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg transition-colors"
+                  title="Edit Lesson"
                 >
-                  <Edit size={18} />
+                  <Edit size={16} /> Open
                 </button>
               </div>
             </div>

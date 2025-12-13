@@ -1,9 +1,18 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Sentence, Word } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
+// Moved initialization inside the function to prevent crash on module load if process.env is unstable
 export const generateCantoneseLesson = async (text: string): Promise<Sentence[]> => {
+  // Safe access to API Key: Check both standard process.env and Vite's import.meta.env
+  // @ts-ignore
+  const apiKey = (typeof process !== 'undefined' ? process.env?.API_KEY : undefined) || (import.meta as any).env?.VITE_API_KEY;
+  
+  if (!apiKey) {
+    console.error("API Key is missing. Please check your environment configuration.");
+    alert("System Error: API Key is missing. Please add VITE_API_KEY to your .env file or Netlify Environment Variables.");
+  }
+  
+  const ai = new GoogleGenAI({ apiKey: apiKey || "MISSING_KEY" });
   const model = "gemini-2.5-flash";
   
   const prompt = `
