@@ -1,34 +1,29 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
-import { Lesson, Student, StudentPackage } from '../types';
-import { ArrowLeft, Play, Pause, Download, Volume2, User, FileJson, Clock } from 'lucide-react';
+import { Lesson } from '../types';
+import { ArrowLeft, Play, Pause, Download, Volume2, User, FileJson, Clock, BookOpen, Trash2 } from 'lucide-react';
 
 interface Props {
-  studentId?: string; // Legacy: for local testing only
-  importedPackage: StudentPackage | null; // The file loaded by student
   onLogout: () => void;
+  importMessage?: string;
 }
 
-const StudentPortal: React.FC<Props> = ({ importedPackage, onLogout }) => {
+const StudentPortal: React.FC<Props> = ({ onLogout, importMessage }) => {
+  const { lessons, deleteLesson } = useData(); // Read directly from DB
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
 
   // Audio Playback State
   const [playingSentenceId, setPlayingSentenceId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  if (!importedPackage) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <div className="bg-white p-8 rounded-xl shadow-lg max-w-md w-full text-center">
-          <h2 className="text-xl font-bold text-red-600 mb-2">No Data Loaded</h2>
-          <p className="text-gray-600 mb-4">Please upload the lesson file sent by your teacher.</p>
-          <button onClick={onLogout} className="text-teal-600 hover:underline">Go Back</button>
-        </div>
-      </div>
-    );
-  }
-
-  const { studentName, lessons, generatedAt } = importedPackage;
+  // Clear import message after a few seconds
+  const [msg, setMsg] = useState(importMessage);
+  useEffect(() => {
+    if(msg) {
+        const t = setTimeout(() => setMsg(''), 5000);
+        return () => clearTimeout(t);
+    }
+  }, [msg]);
 
   const handlePlayAudio = (base64: string | undefined, sentenceId: string) => {
     if (!base64) return;
@@ -54,7 +49,7 @@ const StudentPortal: React.FC<Props> = ({ importedPackage, onLogout }) => {
     const element = document.getElementById('printable-lesson-content');
     if (!element) return;
 
-    // @ts-ignore - html2canvas is loaded via CDN in index.html
+    // @ts-ignore
     if (typeof window.html2canvas === 'undefined' || typeof window.jspdf === 'undefined') {
       alert("PDF libraries loading. Please wait...");
       return;
@@ -79,6 +74,14 @@ const StudentPortal: React.FC<Props> = ({ importedPackage, onLogout }) => {
     }
   };
 
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if(confirm("Remove this lesson from your library?")) {
+        await deleteLesson(id);
+        if(activeLesson?.id === id) setActiveLesson(null);
+    }
+  };
+
   // Lesson Detail View
   if (activeLesson) {
     return (
@@ -88,14 +91,14 @@ const StudentPortal: React.FC<Props> = ({ importedPackage, onLogout }) => {
             onClick={() => setActiveLesson(null)}
             className="flex items-center gap-2 text-gray-600 hover:text-teal-600 font-medium"
           >
-            <ArrowLeft size={20} /> Back
+            <ArrowLeft size={20} /> Library
           </button>
           <div className="flex gap-2">
             <button 
               onClick={handleDownloadPDF}
               className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2 rounded-full text-sm hover:bg-teal-700 shadow-sm"
             >
-              <Download size={16} /> Download PDF
+              <Download size={16} /> Save PDF
             </button>
           </div>
         </div>
@@ -149,7 +152,7 @@ const StudentPortal: React.FC<Props> = ({ importedPackage, onLogout }) => {
                   {/* Translation & Audio */}
                   <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3 group-hover:bg-teal-50 transition-colors">
                     <p className="text-gray-700 italic font-medium">{sentence.english}</p>
-                    {sentence.audioBase64 && (
+                    {sentence.audioBase64 ? (
                       <button
                         // Use class to hide from PDF if needed, but here we keep structure simple
                         data-html2canvas-ignore="true" 
@@ -158,6 +161,9 @@ const StudentPortal: React.FC<Props> = ({ importedPackage, onLogout }) => {
                       >
                         {playingSentenceId === sentence.id ? <Pause size={20} fill="currentColor" /> : <Volume2 size={20} />}
                       </button>
+                    ) : (
+                        // If no audio (e.g. shared via link), show disabled icon or nothing
+                         null
                     )}
                   </div>
                   <div className="h-px bg-gray-100 mt-8 w-full"></div>
@@ -170,57 +176,68 @@ const StudentPortal: React.FC<Props> = ({ importedPackage, onLogout }) => {
     );
   }
 
-  // Dashboard View
+  // Library View
   return (
     <div className="min-h-screen bg-gray-100">
-      <header className="bg-teal-700 text-white p-6 shadow-lg">
+      <header className="bg-orange-600 text-white p-6 shadow-lg">
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold">Welcome, {studentName}</h1>
-            <div className="flex items-center gap-2 opacity-90 text-sm mt-1">
-               <User size={14}/> Student ID: {importedPackage.studentName} {/* Actually we don't have ID in package root, using name context */}
-            </div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+                <BookOpen size={24}/> My Library
+            </h1>
+            <p className="opacity-90 text-sm mt-1">
+               {lessons.length} Lesson{lessons.length !== 1 ? 's' : ''} Saved
+            </p>
           </div>
-          <div className="flex items-center gap-4">
-             <div className="text-xs bg-teal-800 px-3 py-1 rounded-full flex items-center gap-1.5" title={`Data generated at: ${new Date(generatedAt).toLocaleString()}`}>
-               <Clock size={12}/> Updated: {new Date(generatedAt).toLocaleDateString()}
-             </div>
-             <button onClick={onLogout} className="text-teal-100 hover:text-white underline text-sm">Log Out</button>
-          </div>
+          <button onClick={onLogout} className="text-orange-100 hover:text-white underline text-sm">Exit</button>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            <User size={20} className="text-teal-600"/> Assigned Lessons
-          </h2>
-          <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded shadow-sm flex items-center gap-1">
-             <FileJson size={12}/> Source: Web Data
-          </span>
-        </div>
         
+        {msg && (
+            <div className="bg-green-100 border border-green-300 text-green-800 px-4 py-3 rounded-xl mb-6 flex items-center gap-2 animate-bounce">
+                <CheckCircle size={20}/>
+                {msg}
+            </div>
+        )}
+
         {lessons.length === 0 ? (
-           <div className="bg-white p-8 rounded-xl shadow-sm text-center text-gray-500">
-             No lessons assigned yet.
+           <div className="bg-white p-12 rounded-xl shadow-sm text-center text-gray-500 border-2 border-dashed border-gray-300">
+             <div className="bg-gray-50 p-4 rounded-full inline-block mb-3">
+                 <BookOpen size={32} className="text-gray-400"/>
+             </div>
+             <h3 className="text-lg font-bold text-gray-600 mb-2">Library is Empty</h3>
+             <p>Ask your teacher for a <strong>Share Link</strong> or a <strong>Lesson File</strong>.</p>
+             <p className="text-sm mt-4 text-gray-400">Once you open a link, the lesson will appear here.</p>
            </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {lessons.map(lesson => (
-              <button
+              <div
                 key={lesson.id}
                 onClick={() => setActiveLesson(lesson)}
-                className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-all text-left border-l-4 border-teal-500 group"
+                className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-all text-left border-l-4 border-orange-400 group cursor-pointer relative"
               >
                 <div className="flex justify-between items-start mb-2">
-                  <h3 className="text-lg font-bold text-gray-800 group-hover:text-teal-700">{lesson.title}</h3>
-                  <span className="text-xs text-gray-400">{new Date(lesson.createdAt).toLocaleDateString()}</span>
+                  <h3 className="text-lg font-bold text-gray-800 group-hover:text-orange-600">{lesson.title}</h3>
+                  <button 
+                    onClick={(e) => handleDelete(e, lesson.id)}
+                    className="text-gray-300 hover:text-red-500 p-1"
+                    title="Remove from library"
+                  >
+                    <Trash2 size={16}/>
+                  </button>
+                </div>
+                <div className="text-xs text-gray-400 mb-2 flex gap-2">
+                    <span>{new Date(lesson.createdAt).toLocaleDateString()}</span>
+                    {lesson.mediaType === 'youtube' && <span className="bg-red-100 text-red-600 px-1 rounded font-bold">VIDEO</span>}
                 </div>
                 <p className="text-sm text-gray-500 mb-4">{lesson.sentences.length} Sentences</p>
-                <div className="flex items-center text-teal-600 text-sm font-medium">
-                  Start Practicing <ArrowLeft size={16} className="rotate-180 ml-1" />
+                <div className="flex items-center text-orange-600 text-sm font-medium">
+                  Practice <ArrowLeft size={16} className="rotate-180 ml-1" />
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         )}
@@ -228,5 +245,8 @@ const StudentPortal: React.FC<Props> = ({ importedPackage, onLogout }) => {
     </div>
   );
 };
+
+// Helper icon
+import { CheckCircle } from 'lucide-react';
 
 export default StudentPortal;

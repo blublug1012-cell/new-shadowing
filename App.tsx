@@ -3,8 +3,10 @@ import { DataProvider, useData } from './contexts/DataContext';
 import TeacherDashboard from './components/TeacherDashboard';
 import LessonEditor from './components/LessonEditor';
 import StudentPortal from './components/StudentPortal';
-import { AppMode, Lesson, ClassroomData, StudentPackage } from './types';
-import { GraduationCap, Book, AlertTriangle, Loader2, UploadCloud, ArrowRight, Lock } from 'lucide-react';
+import { AppMode, Lesson } from './types';
+import { GraduationCap, BookOpen, AlertTriangle, Loader2, UploadCloud, Lock, PlayCircle } from 'lucide-react';
+// @ts-ignore
+import LZString from 'lz-string';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -48,43 +50,69 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
   }
 }
 
-const AppContent: React.FC = () => {
-  const { isLoading } = useData();
+// Separate component to use hook
+const AppLogic: React.FC = () => {
+  const { isLoading, addLesson } = useData();
   const [mode, setMode] = useState<AppMode>(AppMode.ROLE_SELECT);
   const [editingLesson, setEditingLesson] = useState<Lesson | undefined>(undefined);
   
-  // State for student flow
-  const [classroomData, setClassroomData] = useState<ClassroomData | null>(null);
-  const [studentInputId, setStudentInputId] = useState('');
-  const [isFetchingData, setIsFetchingData] = useState(false);
-  const [fetchError, setFetchError] = useState('');
-  const [studentPackage, setStudentPackage] = useState<StudentPackage | null>(null);
-
   // Teacher Auth State
   const [isTeacherLoginVisible, setIsTeacherLoginVisible] = useState(false);
   const [teacherPin, setTeacherPin] = useState('');
   const [pinError, setPinError] = useState('');
+  
+  // Student State
+  const [importMessage, setImportMessage] = useState('');
 
+  // Handle URL Hashes for Sharing
   useEffect(() => {
-    // If user lands on #/teacher, show login prompt instead of direct access for security
-    if (window.location.hash === '#/teacher') {
-      window.location.hash = ''; // Clear hash
-      setIsTeacherLoginVisible(true);
+    const processHash = async () => {
+      const hash = window.location.hash;
+      
+      // Check for shared lesson link: #/share/COMPRESSED_DATA
+      if (hash.startsWith('#/share/')) {
+        try {
+          const compressed = hash.replace('#/share/', '');
+          const decompressed = LZString.decompressFromEncodedURIComponent(compressed);
+          
+          if (decompressed) {
+            const lesson = JSON.parse(decompressed) as Lesson;
+            
+            // SAVE TO DB automatically
+            await addLesson(lesson);
+            
+            setImportMessage(`Success! Lesson "${lesson.title}" has been added to your library.`);
+            window.location.hash = ''; // Clear hash
+            setMode(AppMode.STUDENT_PORTAL);
+          }
+        } catch (e) {
+          console.error("Failed to parse shared link", e);
+          alert("Invalid or broken share link.");
+        }
+      }
+
+      // Teacher login shortcut
+      if (hash === '#/teacher') {
+        window.location.hash = ''; 
+        setIsTeacherLoginVisible(true);
+      }
+    };
+
+    if (!isLoading) {
+      processHash();
     }
-  }, []);
+  }, [isLoading, addLesson]);
 
   const navigate = (newMode: AppMode, data?: any) => {
     setMode(newMode);
     if (newMode === AppMode.TEACHER_EDITOR) {
       setEditingLesson(data);
     }
-    // Update URL hash for visual reference, but navigation is controlled by state
+    
     if (newMode === AppMode.TEACHER_DASHBOARD) window.location.hash = '/teacher';
+    
     if (newMode === AppMode.ROLE_SELECT) {
       window.location.hash = '';
-      setStudentPackage(null);
-      setStudentInputId('');
-      setFetchError('');
       setIsTeacherLoginVisible(false);
       setTeacherPin('');
     }
@@ -99,76 +127,35 @@ const AppContent: React.FC = () => {
         navigate(AppMode.TEACHER_DASHBOARD);
     } else {
         setPinError('Incorrect Access Code');
-        setTeacherPin(''); // Clear input on error for better UX
+        setTeacherPin(''); 
     }
   };
 
-  const handleStudentLogin = async () => {
-    if (!studentInputId.trim()) return;
-    
-    setIsFetchingData(true);
-    setFetchError('');
-
-    try {
-      let data = classroomData;
-      
-      // If we haven't fetched the master file yet, do it now
-      if (!data) {
-        // Add timestamp to prevent caching
-        const response = await fetch(`/student_data.json?t=${Date.now()}`);
-        if (!response.ok) {
-           throw new Error("Could not find classroom data. Please contact your teacher.");
-        }
-        data = await response.json() as ClassroomData;
-        setClassroomData(data);
-      }
-
-      // Find the student
-      const student = data.students.find(s => s.id === studentInputId.trim());
-      
-      if (!student) {
-        setFetchError("Student ID not found.");
-        setIsFetchingData(false);
-        return;
-      }
-
-      // Filter lessons for this student
-      const assignedLessons = data.lessons.filter(l => student.assignedLessonIds.includes(l.id));
-
-      const pkg: StudentPackage = {
-        studentName: student.name,
-        generatedAt: data.generatedAt,
-        lessons: assignedLessons
-      };
-
-      setStudentPackage(pkg);
-      setMode(AppMode.STUDENT_PORTAL);
-
-    } catch (err) {
-      console.error(err);
-      setFetchError("Could not load data. Has the teacher uploaded the 'student_data.json' file?");
-    } finally {
-      setIsFetchingData(false);
-    }
-  };
-
-  // Allow manual upload fallback
   const handleManualUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const json = JSON.parse(e.target?.result as string);
-        // Handle both simple package and classroom data
-        if (json.students && json.lessons) {
-             // It's a master file, set it and ask for ID
-             setClassroomData(json);
-             alert("File loaded. Please enter your ID now.");
-        } else if (json.lessons && json.studentName) {
-             // It's a single student package
-             setStudentPackage(json);
+        
+        // Handle single lesson file import
+        if (json.title && json.sentences) {
+           await addLesson(json);
+           setImportMessage(`Lesson "${json.title}" imported!`);
+           setMode(AppMode.STUDENT_PORTAL);
+           return;
+        }
+
+        // Handle bulk file (legacy or backup)
+        if (json.lessons && Array.isArray(json.lessons)) {
+             let count = 0;
+             for (const l of json.lessons) {
+               await addLesson(l);
+               count++;
+             }
+             setImportMessage(`${count} lessons imported.`);
              setMode(AppMode.STUDENT_PORTAL);
         } else {
           alert("Invalid file format.");
@@ -185,7 +172,7 @@ const AppContent: React.FC = () => {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
         <Loader2 className="animate-spin text-teal-600 mb-4" size={48} />
-        <p className="text-gray-500 font-medium">Loading your data...</p>
+        <p className="text-gray-500 font-medium">Loading your library...</p>
       </div>
     );
   }
@@ -260,7 +247,7 @@ const AppContent: React.FC = () => {
                   </div>
                   <div className="text-left">
                     <h3 className="font-bold text-gray-800">I am a Teacher</h3>
-                    <p className="text-sm text-gray-500">Create content & manage students</p>
+                    <p className="text-sm text-gray-500">Create content & share links</p>
                   </div>
                 </button>
 
@@ -273,47 +260,36 @@ const AppContent: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Student Entry */}
-                <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                  <div className="flex items-center mb-4">
-                     <div className="bg-orange-500 text-white p-2 rounded-full mr-3">
-                        <Book size={20} />
-                     </div>
-                     <h3 className="font-bold text-gray-800">Student Login</h3>
+                {/* Student Entry - DIRECT LIBRARY ACCESS */}
+                <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm text-center">
+                   <div className="mb-4">
+                     <h3 className="font-bold text-xl text-gray-800">Student Area</h3>
+                     <p className="text-sm text-gray-500 mt-1">Access your saved lessons</p>
+                   </div>
+                   
+                   <button 
+                    onClick={() => setMode(AppMode.STUDENT_PORTAL)}
+                    className="w-full bg-orange-500 text-white py-4 rounded-xl font-bold hover:bg-orange-600 transition flex items-center justify-center gap-2 shadow-md hover:shadow-lg transform hover:-translate-y-1 mb-4"
+                  >
+                    <BookOpen size={24} />
+                    Enter My Library
+                  </button>
+
+                  <div className="text-xs text-gray-400 bg-gray-50 p-3 rounded-lg border border-gray-100 mb-4">
+                     <span className="font-semibold text-gray-600 block mb-1">How to add lessons?</span>
+                     Ask your teacher for a <strong>Link</strong> or a <strong>File</strong>.<br/>
+                     When you click the link, the lesson is automatically added here.
                   </div>
-                  
-                  <div className="space-y-3">
-                    <div>
-                      <input 
-                        type="text" 
-                        placeholder="Enter your Student ID" 
-                        className="w-full border border-gray-300 rounded-lg px-3 py-3 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
-                        value={studentInputId}
-                        onChange={(e) => setStudentInputId(e.target.value)}
-                      />
-                      {fetchError && <p className="text-xs text-red-500 mt-1">{fetchError}</p>}
-                    </div>
-                    
-                    <button 
-                      onClick={handleStudentLogin}
-                      disabled={isFetchingData || !studentInputId}
-                      className="w-full bg-orange-500 text-white py-3 rounded-lg font-bold hover:bg-orange-600 transition flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
-                      {isFetchingData ? <Loader2 className="animate-spin" size={20}/> : <ArrowRight size={20}/>}
-                      {isFetchingData ? "Checking..." : "Enter Class"}
-                    </button>
-                  </div>
-                  
-                  <div className="mt-6 pt-4 border-t border-gray-100 text-center">
-                    <label 
-                      className="text-xs text-gray-400 cursor-pointer hover:text-gray-600 underline flex items-center justify-center gap-1"
-                    >
-                      <UploadCloud size={12}/>
-                      Or upload file manually
-                      <input type="file" className="hidden" accept=".json" onChange={handleManualUpload} />
-                    </label>
-                  </div>
+
+                  <label 
+                    className="inline-flex items-center gap-2 text-xs text-teal-600 cursor-pointer hover:text-teal-800 font-medium py-2"
+                  >
+                    <UploadCloud size={14}/>
+                    <span>Have a file? Click to Import</span>
+                    <input type="file" className="hidden" accept=".json" onChange={handleManualUpload} />
+                  </label>
                 </div>
+
               </div>
             </div>
           </div>
@@ -328,8 +304,8 @@ const AppContent: React.FC = () => {
       case AppMode.STUDENT_PORTAL:
         return (
           <StudentPortal 
-            importedPackage={studentPackage} 
             onLogout={() => navigate(AppMode.ROLE_SELECT)} 
+            importMessage={importMessage}
           />
         );
         
@@ -345,7 +321,7 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <DataProvider>
-        <AppContent />
+        <AppLogic />
       </DataProvider>
     </ErrorBoundary>
   );
