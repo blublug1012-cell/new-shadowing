@@ -1,33 +1,34 @@
 import React, { useState, useRef } from 'react';
 import { useData } from '../contexts/DataContext';
-import { Lesson, Student, AppMode } from '../types';
-import { ArrowLeft, Play, Pause, Download, Volume2, User } from 'lucide-react';
+import { Lesson, Student, StudentPackage } from '../types';
+import { ArrowLeft, Play, Pause, Download, Volume2, User, FileJson } from 'lucide-react';
 
 interface Props {
-  studentId: string;
+  studentId?: string; // Legacy: for local testing only
+  importedPackage: StudentPackage | null; // The file loaded by student
   onLogout: () => void;
 }
 
-const StudentPortal: React.FC<Props> = ({ studentId, onLogout }) => {
-  const { getStudentById, getLessonById } = useData();
-  const student = getStudentById(studentId);
+const StudentPortal: React.FC<Props> = ({ importedPackage, onLogout }) => {
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
 
   // Audio Playback State
   const [playingSentenceId, setPlayingSentenceId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  if (!student) {
+  if (!importedPackage) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
         <div className="bg-white p-8 rounded-xl shadow-lg max-w-md w-full text-center">
-          <h2 className="text-xl font-bold text-red-600 mb-2">Student Not Found</h2>
-          <p className="text-gray-600 mb-4">The ID provided does not match our records.</p>
+          <h2 className="text-xl font-bold text-red-600 mb-2">No Data Loaded</h2>
+          <p className="text-gray-600 mb-4">Please upload the lesson file sent by your teacher.</p>
           <button onClick={onLogout} className="text-teal-600 hover:underline">Go Back</button>
         </div>
       </div>
     );
   }
+
+  const { studentName, lessons } = importedPackage;
 
   const handlePlayAudio = (base64: string | undefined, sentenceId: string) => {
     if (!base64) return;
@@ -165,41 +166,42 @@ const StudentPortal: React.FC<Props> = ({ studentId, onLogout }) => {
       <header className="bg-teal-700 text-white p-6 shadow-lg">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold">Welcome, {student.name}</h1>
+            <h1 className="text-2xl font-bold">Welcome, {studentName}</h1>
             <p className="opacity-90 text-sm">Your Cantonese Practice Dashboard</p>
           </div>
-          <button onClick={onLogout} className="text-teal-100 hover:text-white underline text-sm">Switch User</button>
+          <button onClick={onLogout} className="text-teal-100 hover:text-white underline text-sm">Close File</button>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto p-6">
-        <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-          <User size={20} className="text-teal-600"/> Assigned Lessons
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+            <User size={20} className="text-teal-600"/> Assigned Lessons
+          </h2>
+          <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded shadow-sm flex items-center gap-1">
+             <FileJson size={12}/> Loaded from file
+          </span>
+        </div>
         
-        {student.assignedLessonIds.length === 0 ? (
+        {lessons.length === 0 ? (
            <div className="bg-white p-8 rounded-xl shadow-sm text-center text-gray-500">
-             No lessons assigned yet. Ask your teacher to send you content!
+             This file contains no lessons.
            </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {student.assignedLessonIds.map(lid => {
-              const lesson = getLessonById(lid);
-              if (!lesson) return null;
-              return (
-                <button
-                  key={lid}
-                  onClick={() => setActiveLesson(lesson)}
-                  className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-all text-left border-l-4 border-teal-500 group"
-                >
-                  <h3 className="text-lg font-bold text-gray-800 group-hover:text-teal-700 mb-2">{lesson.title}</h3>
-                  <p className="text-sm text-gray-500 mb-4">{lesson.sentences.length} Sentences</p>
-                  <div className="flex items-center text-teal-600 text-sm font-medium">
-                    Start Practicing <ArrowLeft size={16} className="rotate-180 ml-1" />
-                  </div>
-                </button>
-              );
-            })}
+            {lessons.map(lesson => (
+              <button
+                key={lesson.id}
+                onClick={() => setActiveLesson(lesson)}
+                className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-all text-left border-l-4 border-teal-500 group"
+              >
+                <h3 className="text-lg font-bold text-gray-800 group-hover:text-teal-700 mb-2">{lesson.title}</h3>
+                <p className="text-sm text-gray-500 mb-4">{lesson.sentences.length} Sentences</p>
+                <div className="flex items-center text-teal-600 text-sm font-medium">
+                  Start Practicing <ArrowLeft size={16} className="rotate-180 ml-1" />
+                </div>
+              </button>
+            ))}
           </div>
         )}
       </main>

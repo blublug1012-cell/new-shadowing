@@ -1,3 +1,4 @@
+
 export interface Word {
   char: string;
   jyutping: string[]; // Array for polyphones
@@ -24,6 +25,19 @@ export interface Student {
   id: string;
   name: string;
   assignedLessonIds: string[];
+}
+
+export interface StudentPackage {
+  studentName: string;
+  generatedAt: number;
+  lessons: Lesson[];
+}
+
+// New Interface for the master file
+export interface ClassroomData {
+  generatedAt: number;
+  students: Student[];
+  lessons: Lesson[]; // Contains all lessons referenced by students
 }
 
 export enum AppMode {

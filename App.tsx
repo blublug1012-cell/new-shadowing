@@ -3,10 +3,9 @@ import { DataProvider, useData } from './contexts/DataContext';
 import TeacherDashboard from './components/TeacherDashboard';
 import LessonEditor from './components/LessonEditor';
 import StudentPortal from './components/StudentPortal';
-import { AppMode, Lesson } from './types';
-import { GraduationCap, Book, AlertTriangle, Loader2 } from 'lucide-react';
+import { AppMode, Lesson, ClassroomData, StudentPackage } from './types';
+import { GraduationCap, Book, AlertTriangle, Loader2, UploadCloud, ArrowRight } from 'lucide-react';
 
-// Simple Error Boundary to catch crashes and show them
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
   constructor(props: { children: ReactNode }) {
     super(props);
@@ -53,27 +52,23 @@ const AppContent: React.FC = () => {
   const { isLoading } = useData();
   const [mode, setMode] = useState<AppMode>(AppMode.ROLE_SELECT);
   const [editingLesson, setEditingLesson] = useState<Lesson | undefined>(undefined);
-  const [currentStudentId, setCurrentStudentId] = useState<string>('');
+  
+  // State for student flow
+  const [classroomData, setClassroomData] = useState<ClassroomData | null>(null);
   const [studentInputId, setStudentInputId] = useState('');
+  const [isFetchingData, setIsFetchingData] = useState(false);
+  const [fetchError, setFetchError] = useState('');
+  const [studentPackage, setStudentPackage] = useState<StudentPackage | null>(null);
 
-  // Handle Hash Routing for Student Direct Links
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
-      if (hash.startsWith('#/student/')) {
-        const id = hash.split('/student/')[1];
-        if (id) {
-          setCurrentStudentId(id);
-          setMode(AppMode.STUDENT_PORTAL);
-        }
-      } else if (hash === '#/teacher') {
+      if (hash === '#/teacher') {
         setMode(AppMode.TEACHER_DASHBOARD);
       }
     };
-
     window.addEventListener('hashchange', handleHashChange);
-    handleHashChange(); // Check on mount
-
+    handleHashChange();
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
@@ -82,18 +77,91 @@ const AppContent: React.FC = () => {
     if (newMode === AppMode.TEACHER_EDITOR) {
       setEditingLesson(data);
     }
-    
-    // Update URL hash for simple state reflection
     if (newMode === AppMode.TEACHER_DASHBOARD) window.location.hash = '/teacher';
-    if (newMode === AppMode.ROLE_SELECT) window.location.hash = '';
+    if (newMode === AppMode.ROLE_SELECT) {
+      window.location.hash = '';
+      setStudentPackage(null);
+      setStudentInputId('');
+      setFetchError('');
+    }
   };
 
-  const handleStudentLogin = () => {
-    if (studentInputId.trim()) {
-      setCurrentStudentId(studentInputId);
+  const handleStudentLogin = async () => {
+    if (!studentInputId.trim()) return;
+    
+    setIsFetchingData(true);
+    setFetchError('');
+
+    try {
+      let data = classroomData;
+      
+      // If we haven't fetched the master file yet, do it now
+      if (!data) {
+        // Add timestamp to prevent caching
+        const response = await fetch(`/student_data.json?t=${Date.now()}`);
+        if (!response.ok) {
+           throw new Error("Could not find classroom data. Please contact your teacher.");
+        }
+        data = await response.json() as ClassroomData;
+        setClassroomData(data);
+      }
+
+      // Find the student
+      const student = data.students.find(s => s.id === studentInputId.trim());
+      
+      if (!student) {
+        setFetchError("Student ID not found.");
+        setIsFetchingData(false);
+        return;
+      }
+
+      // Filter lessons for this student
+      const assignedLessons = data.lessons.filter(l => student.assignedLessonIds.includes(l.id));
+
+      const pkg: StudentPackage = {
+        studentName: student.name,
+        generatedAt: data.generatedAt,
+        lessons: assignedLessons
+      };
+
+      setStudentPackage(pkg);
       setMode(AppMode.STUDENT_PORTAL);
-      window.location.hash = `/student/${studentInputId}`;
+
+    } catch (err) {
+      console.error(err);
+      setFetchError("Could not load data. Has the teacher uploaded the 'student_data.json' file?");
+    } finally {
+      setIsFetchingData(false);
     }
+  };
+
+  // Allow manual upload fallback
+  const handleManualUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const json = JSON.parse(e.target?.result as string);
+        // Handle both simple package and classroom data
+        if (json.students && json.lessons) {
+             // It's a master file, set it and ask for ID
+             setClassroomData(json);
+             alert("File loaded. Please enter your ID now.");
+        } else if (json.lessons && json.studentName) {
+             // It's a single student package
+             setStudentPackage(json);
+             setMode(AppMode.STUDENT_PORTAL);
+        } else {
+          alert("Invalid file format.");
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Error reading file.");
+      }
+    };
+    reader.readAsText(file);
   };
 
   if (isLoading) {
@@ -141,31 +209,45 @@ const AppContent: React.FC = () => {
                 </div>
 
                 {/* Student Entry */}
-                <div className="bg-white border border-gray-200 rounded-xl p-4">
-                  <div className="flex items-center mb-3">
+                <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                  <div className="flex items-center mb-4">
                      <div className="bg-orange-500 text-white p-2 rounded-full mr-3">
                         <Book size={20} />
                      </div>
-                     <h3 className="font-bold text-gray-800">I am a Student</h3>
+                     <h3 className="font-bold text-gray-800">Student Login</h3>
                   </div>
-                  <div className="flex gap-2">
-                    <input 
-                      type="text" 
-                      placeholder="Enter Student ID" 
-                      className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
-                      value={studentInputId}
-                      onChange={(e) => setStudentInputId(e.target.value)}
-                    />
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <input 
+                        type="text" 
+                        placeholder="Enter your Student ID" 
+                        className="w-full border border-gray-300 rounded-lg px-3 py-3 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
+                        value={studentInputId}
+                        onChange={(e) => setStudentInputId(e.target.value)}
+                      />
+                      {fetchError && <p className="text-xs text-red-500 mt-1">{fetchError}</p>}
+                    </div>
+                    
                     <button 
                       onClick={handleStudentLogin}
-                      className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-600 transition"
+                      disabled={isFetchingData || !studentInputId}
+                      className="w-full bg-orange-500 text-white py-3 rounded-lg font-bold hover:bg-orange-600 transition flex items-center justify-center gap-2 disabled:opacity-50"
                     >
-                      Go
+                      {isFetchingData ? <Loader2 className="animate-spin" size={20}/> : <ArrowRight size={20}/>}
+                      {isFetchingData ? "Checking..." : "Enter Class"}
                     </button>
                   </div>
-                  <p className="text-xs text-gray-400 mt-2">
-                    *Tip: Teachers generate your unique ID link.
-                  </p>
+                  
+                  <div className="mt-6 pt-4 border-t border-gray-100 text-center">
+                    <label 
+                      className="text-xs text-gray-400 cursor-pointer hover:text-gray-600 underline flex items-center justify-center gap-1"
+                    >
+                      <UploadCloud size={12}/>
+                      Or upload file manually
+                      <input type="file" className="hidden" accept=".json" onChange={handleManualUpload} />
+                    </label>
+                  </div>
                 </div>
               </div>
             </div>
@@ -179,7 +261,12 @@ const AppContent: React.FC = () => {
         return <LessonEditor onNavigate={navigate} editLesson={editingLesson} />;
       
       case AppMode.STUDENT_PORTAL:
-        return <StudentPortal studentId={currentStudentId} onLogout={() => navigate(AppMode.ROLE_SELECT)} />;
+        return (
+          <StudentPortal 
+            importedPackage={studentPackage} 
+            onLogout={() => navigate(AppMode.ROLE_SELECT)} 
+          />
+        );
         
       default:
         return <div>Unknown Mode</div>;

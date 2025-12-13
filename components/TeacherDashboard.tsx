@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
-import { Lesson, Student, AppMode } from '../types';
-import { Plus, Users, BookOpen, Share2, FileText, Trash2, Edit, History } from 'lucide-react';
+import { Lesson, Student, AppMode, ClassroomData } from '../types';
+import { Plus, Users, Trash2, Edit, History, FileDown, UploadCloud, Info } from 'lucide-react';
 
 interface Props {
   onNavigate: (mode: AppMode, data?: any) => void;
@@ -31,31 +31,69 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
     alert('Lesson assigned successfully!');
   };
 
-  const copyStudentLink = (studentId: string) => {
-    // In a real app this would be a real URL. Here we simulate the logic.
-    // We construct a URL that opens this specific app state.
-    const url = `${window.location.origin}${window.location.pathname}#/student/${studentId}`;
-    navigator.clipboard.writeText(url);
-    alert(`Link copied for student! URL: ${url}`);
+  // New function to export EVERYTHING
+  const exportClassroomData = () => {
+    const data: ClassroomData = {
+      generatedAt: Date.now(),
+      students: students,
+      lessons: lessons
+    };
+
+    const jsonString = JSON.stringify(data);
+    const blob = new Blob([jsonString], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `student_data.json`; // Fixed name for consistency
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    alert("File 'student_data.json' downloaded!\n\nINSTRUCTIONS:\n1. Move this file to the 'public' folder of your project code.\n2. Push your code to Netlify.\n3. Students will be able to access their work just by entering their ID.");
   };
 
   return (
     <div className="max-w-6xl mx-auto p-6">
-      <header className="mb-8 flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+      <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
              Teacher Dashboard
           </h1>
-          <p className="text-gray-600 mt-1">Manage your students and access your <b>Lesson History</b> below.</p>
+          <p className="text-gray-600 mt-1">Manage content and deploy updates to students.</p>
         </div>
-        <button 
-          onClick={handleCreateLesson}
-          className="flex items-center gap-2 bg-teal-600 text-white px-5 py-3 rounded-xl hover:bg-teal-700 transition shadow-md font-medium"
-        >
-          <Plus size={20} />
-          Create New Lesson
-        </button>
+        <div className="flex gap-3">
+          <button 
+            onClick={exportClassroomData}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-3 rounded-xl hover:bg-indigo-700 transition shadow-md font-medium"
+            title="Download the master data file to upload to your website"
+          >
+            <UploadCloud size={20} />
+            Generate Website Data
+          </button>
+          <button 
+            onClick={handleCreateLesson}
+            className="flex items-center gap-2 bg-teal-600 text-white px-5 py-3 rounded-xl hover:bg-teal-700 transition shadow-md font-medium"
+          >
+            <Plus size={20} />
+            Create Lesson
+          </button>
+        </div>
       </header>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-start gap-3">
+        <Info className="text-blue-600 mt-1 shrink-0" size={20} />
+        <div className="text-sm text-blue-800">
+          <strong>How to send work to students:</strong>
+          <ul className="list-disc ml-5 mt-1 space-y-1">
+             <li>Assign lessons to students in the "Students" tab below.</li>
+             <li>Click <strong>"Generate Website Data"</strong> above to download <code>student_data.json</code>.</li>
+             <li>Replace the file in your project's <code>public/</code> folder with this new file and deploy.</li>
+             <li>Send your website URL to students. They only need their <strong>Student ID</strong>.</li>
+          </ul>
+        </div>
+      </div>
 
       <div className="flex gap-4 mb-6 border-b border-gray-200">
         <button
@@ -138,14 +176,10 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="font-bold text-lg text-gray-800">{student.name}</h3>
-                    <p className="text-xs text-gray-500">ID: {student.id}</p>
+                    <p className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded mt-1 inline-block select-all">
+                      ID: {student.id}
+                    </p>
                   </div>
-                  <button 
-                    onClick={() => copyStudentLink(student.id)}
-                    className="flex items-center gap-1 text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded-full hover:bg-blue-100"
-                  >
-                    <Share2 size={14} /> Copy Link
-                  </button>
                 </div>
                 
                 <div className="mb-4">
