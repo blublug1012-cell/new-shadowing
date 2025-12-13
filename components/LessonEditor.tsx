@@ -30,8 +30,9 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
       const generatedSentences = await generateCantoneseLesson(inputText);
       setSentences(generatedSentences);
       setStep(2);
-    } catch (error) {
-      alert("Failed to process text. Please check your connection or try again.");
+    } catch (error: any) {
+      // Display the actual error message from the service
+      alert(`Error: ${error.message}`);
     } finally {
       setIsProcessing(false);
     }

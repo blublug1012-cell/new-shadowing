@@ -8,11 +8,12 @@ export const generateCantoneseLesson = async (text: string): Promise<Sentence[]>
   const apiKey = (typeof process !== 'undefined' ? process.env?.API_KEY : undefined) || (import.meta as any).env?.VITE_API_KEY;
   
   if (!apiKey) {
-    console.error("API Key is missing. Please check your environment configuration.");
-    alert("System Error: API Key is missing. Please add VITE_API_KEY to your .env file or Netlify Environment Variables.");
+    const msg = "System Error: API Key is missing. Please add VITE_API_KEY to your .env file or Netlify Environment Variables.";
+    console.error(msg);
+    throw new Error(msg);
   }
   
-  const ai = new GoogleGenAI({ apiKey: apiKey || "MISSING_KEY" });
+  const ai = new GoogleGenAI({ apiKey: apiKey });
   const model = "gemini-2.5-flash";
   
   const prompt = `
@@ -34,53 +35,68 @@ export const generateCantoneseLesson = async (text: string): Promise<Sentence[]>
     "${text}"
   `;
 
-  const response = await ai.models.generateContent({
-    model: model,
-    contents: prompt,
-    config: {
-      systemInstruction: "You are a specialized Cantonese teacher. You handle code-switching (mixed English/Cantonese) perfectly. You represent English words as single units and preserve punctuation exactly.",
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            id: { type: Type.STRING },
-            english: { type: Type.STRING },
-            words: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  char: { type: Type.STRING },
-                  jyutping: { 
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING }
+  try {
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: prompt,
+      config: {
+        systemInstruction: "You are a specialized Cantonese teacher. You handle code-switching (mixed English/Cantonese) perfectly. You represent English words as single units and preserve punctuation exactly.",
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              id: { type: Type.STRING },
+              english: { type: Type.STRING },
+              words: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    char: { type: Type.STRING },
+                    jyutping: { 
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING }
+                    },
+                    selectedJyutping: { type: Type.STRING }
                   },
-                  selectedJyutping: { type: Type.STRING }
-                },
-                required: ["char", "jyutping", "selectedJyutping"]
+                  required: ["char", "jyutping", "selectedJyutping"]
+                }
               }
-            }
-          },
-          required: ["id", "english", "words"]
+            },
+            required: ["id", "english", "words"]
+          }
         }
       }
-    }
-  });
+    });
 
-  if (response.text) {
-    try {
-      const data = JSON.parse(response.text);
-      // Ensure unique IDs if the model doesn't generate them well
-      return data.map((s: any, idx: number) => ({
-        ...s,
-        id: s.id || `sent-${Date.now()}-${idx}`
-      }));
-    } catch (e) {
-      console.error("Failed to parse Gemini response", e);
-      throw new Error("Failed to process text.");
+    if (response.text) {
+      let cleanText = response.text.trim();
+      // Remove markdown code blocks if present (common issue with LLM outputs)
+      if (cleanText.startsWith('```json')) {
+        cleanText = cleanText.replace(/^```json/, '').replace(/```$/, '');
+      } else if (cleanText.startsWith('```')) {
+        cleanText = cleanText.replace(/^```/, '').replace(/```$/, '');
+      }
+
+      try {
+        const data = JSON.parse(cleanText);
+        // Ensure unique IDs if the model doesn't generate them well
+        return data.map((s: any, idx: number) => ({
+          ...s,
+          id: s.id || `sent-${Date.now()}-${idx}`
+        }));
+      } catch (e) {
+        console.error("JSON Parse Error:", e);
+        console.error("Raw Text received:", response.text);
+        throw new Error("AI returned invalid data format. Please try again.");
+      }
     }
+  } catch (error: any) {
+    console.error("Gemini API Error details:", error);
+    // Throw the actual error message so the UI can display it
+    throw new Error(error.message || "Unknown API Error");
   }
 
   throw new Error("No response from AI.");
