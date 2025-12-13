@@ -1,0 +1,7 @@
+{
+  "name": "YuetYu Tutor - Cantonese Learning Platform",
+  "description": "A comprehensive tool for Cantonese teachers to create shadowing lessons with AI-generated Jyutping, translations, and voice recordings for foreign students.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
