@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useData } from '../contexts/DataContext';
 import { Lesson, Student, StudentPackage } from '../types';
-import { ArrowLeft, Play, Pause, Download, Volume2, User, FileJson } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Download, Volume2, User, FileJson, Clock } from 'lucide-react';
 
 interface Props {
   studentId?: string; // Legacy: for local testing only
@@ -28,7 +28,7 @@ const StudentPortal: React.FC<Props> = ({ importedPackage, onLogout }) => {
     );
   }
 
-  const { studentName, lessons } = importedPackage;
+  const { studentName, lessons, generatedAt } = importedPackage;
 
   const handlePlayAudio = (base64: string | undefined, sentenceId: string) => {
     if (!base64) return;
@@ -164,12 +164,19 @@ const StudentPortal: React.FC<Props> = ({ importedPackage, onLogout }) => {
   return (
     <div className="min-h-screen bg-gray-100">
       <header className="bg-teal-700 text-white p-6 shadow-lg">
-        <div className="max-w-4xl mx-auto flex justify-between items-center">
+        <div className="max-w-4xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold">Welcome, {studentName}</h1>
-            <p className="opacity-90 text-sm">Your Cantonese Practice Dashboard</p>
+            <div className="flex items-center gap-2 opacity-90 text-sm mt-1">
+               <User size={14}/> Student ID: {importedPackage.studentName} {/* Actually we don't have ID in package root, using name context */}
+            </div>
           </div>
-          <button onClick={onLogout} className="text-teal-100 hover:text-white underline text-sm">Close File</button>
+          <div className="flex items-center gap-4">
+             <div className="text-xs bg-teal-800 px-3 py-1 rounded-full flex items-center gap-1.5" title={`Data generated at: ${new Date(generatedAt).toLocaleString()}`}>
+               <Clock size={12}/> Updated: {new Date(generatedAt).toLocaleDateString()}
+             </div>
+             <button onClick={onLogout} className="text-teal-100 hover:text-white underline text-sm">Log Out</button>
+          </div>
         </div>
       </header>
 
@@ -179,13 +186,13 @@ const StudentPortal: React.FC<Props> = ({ importedPackage, onLogout }) => {
             <User size={20} className="text-teal-600"/> Assigned Lessons
           </h2>
           <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded shadow-sm flex items-center gap-1">
-             <FileJson size={12}/> Loaded from file
+             <FileJson size={12}/> Source: Web Data
           </span>
         </div>
         
         {lessons.length === 0 ? (
            <div className="bg-white p-8 rounded-xl shadow-sm text-center text-gray-500">
-             This file contains no lessons.
+             No lessons assigned yet.
            </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -195,7 +202,10 @@ const StudentPortal: React.FC<Props> = ({ importedPackage, onLogout }) => {
                 onClick={() => setActiveLesson(lesson)}
                 className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-all text-left border-l-4 border-teal-500 group"
               >
-                <h3 className="text-lg font-bold text-gray-800 group-hover:text-teal-700 mb-2">{lesson.title}</h3>
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="text-lg font-bold text-gray-800 group-hover:text-teal-700">{lesson.title}</h3>
+                  <span className="text-xs text-gray-400">{new Date(lesson.createdAt).toLocaleDateString()}</span>
+                </div>
                 <p className="text-sm text-gray-500 mb-4">{lesson.sentences.length} Sentences</p>
                 <div className="flex items-center text-teal-600 text-sm font-medium">
                   Start Practicing <ArrowLeft size={16} className="rotate-180 ml-1" />

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
 import { Lesson, Student, AppMode, ClassroomData } from '../types';
-import { Plus, Users, Trash2, Edit, History, FileDown, UploadCloud, Info } from 'lucide-react';
+import { Plus, Users, Trash2, Edit, History, FileDown, UploadCloud, Info, CheckCircle } from 'lucide-react';
 
 interface Props {
   onNavigate: (mode: AppMode, data?: any) => void;
@@ -51,7 +51,7 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     
-    alert("File 'student_data.json' downloaded!\n\nINSTRUCTIONS:\n1. Move this file to the 'public' folder of your project code.\n2. Push your code to Netlify.\n3. Students will be able to access their work just by entering their ID.");
+    alert("Data file generated successfully!\n\nNext Step: Replace the 'student_data.json' in your 'public' folder and deploy your site.");
   };
 
   return (
@@ -82,16 +82,20 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
         </div>
       </header>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-start gap-3">
-        <Info className="text-blue-600 mt-1 shrink-0" size={20} />
-        <div className="text-sm text-blue-800">
-          <strong>How to send work to students:</strong>
-          <ul className="list-disc ml-5 mt-1 space-y-1">
-             <li>Assign lessons to students in the "Students" tab below.</li>
-             <li>Click <strong>"Generate Website Data"</strong> above to download <code>student_data.json</code>.</li>
-             <li>Replace the file in your project's <code>public/</code> folder with this new file and deploy.</li>
-             <li>Send your website URL to students. They only need their <strong>Student ID</strong>.</li>
-          </ul>
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6">
+        <div className="flex items-start gap-3">
+          <Info className="text-blue-600 mt-1 shrink-0" size={24} />
+          <div>
+            <h3 className="font-bold text-blue-800 text-lg mb-2">How to update homework for students?</h3>
+            <ol className="list-decimal ml-5 space-y-2 text-sm text-blue-900">
+               <li><strong>Assign Work:</strong> Create lessons and assign them to students below. Your local browser saves everything automatically.</li>
+               <li><strong>Generate Data:</strong> Click the purple <strong>"Generate Website Data"</strong> button above. This downloads a file called <code>student_data.json</code>.
+                   <br/><span className="text-xs text-blue-600 opacity-80">(Note: This file contains ALL history. It is a full backup of all students and lessons.)</span>
+               </li>
+               <li><strong>Deploy:</strong> Replace the file in your project's <code>public/</code> folder with this new file, then update your website (e.g., git push).</li>
+               <li><strong>Done:</strong> Students just need to refresh their page. Their ID will now show the new content plus all history.</li>
+            </ol>
+          </div>
         </div>
       </div>
 
@@ -176,7 +180,7 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="font-bold text-lg text-gray-800">{student.name}</h3>
-                    <p className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded mt-1 inline-block select-all">
+                    <p className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded mt-1 inline-block select-all cursor-pointer" title="Click to copy" onClick={() => {navigator.clipboard.writeText(student.id); alert('ID copied!')}}>
                       ID: {student.id}
                     </p>
                   </div>
@@ -191,7 +195,8 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
                       student.assignedLessonIds.map(lid => {
                         const l = lessons.find(x => x.id === lid);
                         return l ? (
-                          <span key={lid} className="text-xs bg-teal-50 text-teal-700 px-2 py-1 rounded border border-teal-100">
+                          <span key={lid} className="text-xs bg-teal-50 text-teal-700 px-2 py-1 rounded border border-teal-100 flex items-center gap-1">
+                            <CheckCircle size={10} />
                             {l.title}
                           </span>
                         ) : null;

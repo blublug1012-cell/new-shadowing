@@ -4,7 +4,7 @@ import TeacherDashboard from './components/TeacherDashboard';
 import LessonEditor from './components/LessonEditor';
 import StudentPortal from './components/StudentPortal';
 import { AppMode, Lesson, ClassroomData, StudentPackage } from './types';
-import { GraduationCap, Book, AlertTriangle, Loader2, UploadCloud, ArrowRight } from 'lucide-react';
+import { GraduationCap, Book, AlertTriangle, Loader2, UploadCloud, ArrowRight, Lock } from 'lucide-react';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -60,16 +60,17 @@ const AppContent: React.FC = () => {
   const [fetchError, setFetchError] = useState('');
   const [studentPackage, setStudentPackage] = useState<StudentPackage | null>(null);
 
+  // Teacher Auth State
+  const [isTeacherLoginVisible, setIsTeacherLoginVisible] = useState(false);
+  const [teacherPin, setTeacherPin] = useState('');
+  const [pinError, setPinError] = useState('');
+
   useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash;
-      if (hash === '#/teacher') {
-        setMode(AppMode.TEACHER_DASHBOARD);
-      }
-    };
-    window.addEventListener('hashchange', handleHashChange);
-    handleHashChange();
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    // If user lands on #/teacher, show login prompt instead of direct access for security
+    if (window.location.hash === '#/teacher') {
+      window.location.hash = ''; // Clear hash
+      setIsTeacherLoginVisible(true);
+    }
   }, []);
 
   const navigate = (newMode: AppMode, data?: any) => {
@@ -77,12 +78,28 @@ const AppContent: React.FC = () => {
     if (newMode === AppMode.TEACHER_EDITOR) {
       setEditingLesson(data);
     }
+    // Update URL hash for visual reference, but navigation is controlled by state
     if (newMode === AppMode.TEACHER_DASHBOARD) window.location.hash = '/teacher';
     if (newMode === AppMode.ROLE_SELECT) {
       window.location.hash = '';
       setStudentPackage(null);
       setStudentInputId('');
       setFetchError('');
+      setIsTeacherLoginVisible(false);
+      setTeacherPin('');
+    }
+  };
+
+  const handleTeacherLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (teacherPin === '2110') {
+        setPinError('');
+        setTeacherPin('');
+        setIsTeacherLoginVisible(false);
+        navigate(AppMode.TEACHER_DASHBOARD);
+    } else {
+        setPinError('Incorrect Access Code');
+        setTeacherPin(''); // Clear input on error for better UX
     }
   };
 
@@ -176,6 +193,54 @@ const AppContent: React.FC = () => {
   const renderContent = () => {
     switch (mode) {
       case AppMode.ROLE_SELECT:
+        if (isTeacherLoginVisible) {
+          return (
+             <div className="min-h-screen bg-gradient-to-br from-teal-500 to-emerald-700 flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full animate-fade-in">
+                  <div className="text-center mb-6">
+                    <div className="bg-teal-100 text-teal-600 p-3 rounded-full inline-block mb-3">
+                        <Lock size={32} />
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-800">Teacher Access</h2>
+                    <p className="text-gray-500 text-sm">Please enter the access code to continue.</p>
+                  </div>
+
+                  <form onSubmit={handleTeacherLoginSubmit} className="space-y-4">
+                     <div>
+                        <input 
+                            type="password" 
+                            autoFocus
+                            placeholder="Enter Code"
+                            className="w-full text-center text-2xl tracking-widest border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-teal-500 outline-none"
+                            value={teacherPin}
+                            onChange={(e) => setTeacherPin(e.target.value)}
+                        />
+                        {pinError && <p className="text-red-500 text-sm text-center mt-2">{pinError}</p>}
+                     </div>
+                     
+                     <button 
+                        type="submit"
+                        className="w-full bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 transition"
+                     >
+                        Verify Access
+                     </button>
+                     <button 
+                        type="button"
+                        onClick={() => {
+                            setIsTeacherLoginVisible(false);
+                            setTeacherPin('');
+                            setPinError('');
+                        }}
+                        className="w-full text-gray-500 py-2 hover:text-gray-700 text-sm"
+                     >
+                        Cancel
+                     </button>
+                  </form>
+                </div>
+              </div>
+          );
+        }
+
         return (
           <div className="min-h-screen bg-gradient-to-br from-teal-500 to-emerald-700 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
@@ -187,7 +252,7 @@ const AppContent: React.FC = () => {
               <div className="space-y-6">
                 {/* Teacher Entry */}
                 <button
-                  onClick={() => navigate(AppMode.TEACHER_DASHBOARD)}
+                  onClick={() => setIsTeacherLoginVisible(true)}
                   className="w-full flex items-center p-4 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-all group"
                 >
                   <div className="bg-teal-600 text-white p-3 rounded-full mr-4 group-hover:scale-110 transition-transform">
