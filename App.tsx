@@ -1,10 +1,53 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { DataProvider, useData } from './contexts/DataContext';
 import TeacherDashboard from './components/TeacherDashboard';
 import LessonEditor from './components/LessonEditor';
 import StudentPortal from './components/StudentPortal';
 import { AppMode, Lesson } from './types';
-import { GraduationCap, Book } from 'lucide-react';
+import { GraduationCap, Book, AlertTriangle } from 'lucide-react';
+
+// Simple Error Boundary to catch crashes and show them
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
+          <div className="bg-white p-8 rounded-xl shadow-lg max-w-lg w-full border border-red-100">
+            <div className="flex items-center gap-3 text-red-600 mb-4">
+              <AlertTriangle size={32} />
+              <h1 className="text-xl font-bold">Something went wrong</h1>
+            </div>
+            <p className="text-gray-600 mb-4">The application encountered an unexpected error.</p>
+            <div className="bg-gray-100 p-4 rounded text-sm font-mono overflow-auto max-h-40 mb-4">
+              {this.state.error?.toString()}
+            </div>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="w-full bg-teal-600 text-white py-2 rounded-lg hover:bg-teal-700"
+            >
+              Reload Application
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 const AppContent: React.FC = () => {
   const [mode, setMode] = useState<AppMode>(AppMode.ROLE_SELECT);
@@ -138,9 +181,11 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <DataProvider>
-      <AppContent />
-    </DataProvider>
+    <ErrorBoundary>
+      <DataProvider>
+        <AppContent />
+      </DataProvider>
+    </ErrorBoundary>
   );
 };
 
