@@ -4,7 +4,7 @@ import TeacherDashboard from './components/TeacherDashboard';
 import LessonEditor from './components/LessonEditor';
 import StudentPortal from './components/StudentPortal';
 import { AppMode, Lesson } from './types';
-import { GraduationCap, Book, AlertTriangle } from 'lucide-react';
+import { GraduationCap, Book, AlertTriangle, Loader2 } from 'lucide-react';
 
 // Simple Error Boundary to catch crashes and show them
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
@@ -50,6 +50,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 }
 
 const AppContent: React.FC = () => {
+  const { isLoading } = useData();
   const [mode, setMode] = useState<AppMode>(AppMode.ROLE_SELECT);
   const [editingLesson, setEditingLesson] = useState<Lesson | undefined>(undefined);
   const [currentStudentId, setCurrentStudentId] = useState<string>('');
@@ -94,6 +95,15 @@ const AppContent: React.FC = () => {
       window.location.hash = `/student/${studentInputId}`;
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+        <Loader2 className="animate-spin text-teal-600 mb-4" size={48} />
+        <p className="text-gray-500 font-medium">Loading your data...</p>
+      </div>
+    );
+  }
 
   const renderContent = () => {
     switch (mode) {

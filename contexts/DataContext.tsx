@@ -1,75 +1,116 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Lesson, Student } from '../types';
+import { dbService } from '../services/db';
 
 interface DataContextType {
   lessons: Lesson[];
   students: Student[];
-  addLesson: (lesson: Lesson) => void;
-  updateLesson: (lesson: Lesson) => void;
-  deleteLesson: (id: string) => void;
-  addStudent: (name: string) => void;
-  assignLesson: (studentId: string, lessonId: string) => void;
+  isLoading: boolean;
+  addLesson: (lesson: Lesson) => Promise<void>;
+  updateLesson: (lesson: Lesson) => Promise<void>;
+  deleteLesson: (id: string) => Promise<void>;
+  addStudent: (name: string) => Promise<void>;
+  assignLesson: (studentId: string, lessonId: string) => Promise<void>;
   getStudentById: (id: string) => Student | undefined;
   getLessonById: (id: string) => Lesson | undefined;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY = 'yuetyu_tutor_data_v1';
+const OLD_LOCAL_STORAGE_KEY = 'yuetyu_tutor_data_v1';
 
 export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Load from local storage on mount
+  // Initialize DB and load data
   useEffect(() => {
-    const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (saved) {
+    const initData = async () => {
       try {
-        const parsed = JSON.parse(saved);
-        setLessons(parsed.lessons || []);
-        setStudents(parsed.students || []);
-      } catch (e) {
-        console.error("Failed to load data", e);
+        await dbService.init();
+        
+        // Attempt migration if user has old data
+        await dbService.migrateFromLocalStorage(OLD_LOCAL_STORAGE_KEY);
+
+        const loadedLessons = await dbService.getAllLessons();
+        const loadedStudents = await dbService.getAllStudents();
+        
+        // Sort lessons by date desc
+        setLessons(loadedLessons.sort((a, b) => b.createdAt - a.createdAt));
+        setStudents(loadedStudents);
+      } catch (err) {
+        console.error("Failed to initialize database:", err);
+        alert("Database error: Your browser might be in private mode or blocking storage.");
+      } finally {
+        setIsLoading(false);
       }
-    }
+    };
+
+    initData();
   }, []);
 
-  // Save to local storage on change
-  useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ lessons, students }));
-  }, [lessons, students]);
-
-  const addLesson = (lesson: Lesson) => {
-    setLessons(prev => [lesson, ...prev]);
+  const addLesson = async (lesson: Lesson) => {
+    try {
+      await dbService.saveLesson(lesson);
+      setLessons(prev => [lesson, ...prev]);
+    } catch (e) {
+      console.error("Failed to save lesson", e);
+      alert("Error saving lesson. Storage might be full.");
+    }
   };
 
-  const updateLesson = (updatedLesson: Lesson) => {
-    setLessons(prev => prev.map(l => l.id === updatedLesson.id ? updatedLesson : l));
+  const updateLesson = async (updatedLesson: Lesson) => {
+    try {
+      await dbService.saveLesson(updatedLesson);
+      setLessons(prev => prev.map(l => l.id === updatedLesson.id ? updatedLesson : l));
+    } catch (e) {
+      console.error("Failed to update lesson", e);
+      alert("Error updating lesson.");
+    }
   };
 
-  const deleteLesson = (id: string) => {
-    setLessons(prev => prev.filter(l => l.id !== id));
+  const deleteLesson = async (id: string) => {
+    try {
+      await dbService.deleteLesson(id);
+      setLessons(prev => prev.filter(l => l.id !== id));
+    } catch (e) {
+      console.error("Failed to delete lesson", e);
+    }
   };
 
-  const addStudent = (name: string) => {
+  const addStudent = async (name: string) => {
     const newStudent: Student = {
       id: `student-${Date.now()}`,
       name,
       assignedLessonIds: []
     };
-    setStudents(prev => [...prev, newStudent]);
+    try {
+      await dbService.saveStudent(newStudent);
+      setStudents(prev => [...prev, newStudent]);
+    } catch (e) {
+      console.error("Failed to save student", e);
+    }
   };
 
-  const assignLesson = (studentId: string, lessonId: string) => {
-    setStudents(prev => prev.map(s => {
-      if (s.id === studentId) {
-        // Avoid duplicates
-        if (s.assignedLessonIds.includes(lessonId)) return s;
-        return { ...s, assignedLessonIds: [lessonId, ...s.assignedLessonIds] };
-      }
-      return s;
-    }));
+  const assignLesson = async (studentId: string, lessonId: string) => {
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
+    
+    // Avoid duplicates
+    if (student.assignedLessonIds.includes(lessonId)) return;
+
+    const updatedStudent = { 
+      ...student, 
+      assignedLessonIds: [lessonId, ...student.assignedLessonIds] 
+    };
+
+    try {
+      await dbService.saveStudent(updatedStudent);
+      setStudents(prev => prev.map(s => s.id === studentId ? updatedStudent : s));
+    } catch (e) {
+      console.error("Failed to assign lesson", e);
+    }
   };
 
   const getStudentById = (id: string) => students.find(s => s.id === id);
@@ -79,6 +120,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     <DataContext.Provider value={{
       lessons,
       students,
+      isLoading,
       addLesson,
       updateLesson,
       deleteLesson,
