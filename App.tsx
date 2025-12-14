@@ -4,9 +4,7 @@ import TeacherDashboard from './components/TeacherDashboard';
 import LessonEditor from './components/LessonEditor';
 import StudentPortal from './components/StudentPortal';
 import { AppMode, Lesson, ClassroomData } from './types';
-import { GraduationCap, BookOpen, AlertTriangle, Loader2, UploadCloud, Lock, PlayCircle, Info } from 'lucide-react';
-// @ts-ignore
-import LZString from 'lz-string';
+import { GraduationCap, AlertTriangle, Loader2, Lock, Info } from 'lucide-react';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -52,11 +50,13 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 
 // Separate component to use hook
 const AppLogic: React.FC = () => {
-  const { isLoading, addLesson, loadStaticData } = useData();
+  const { isLoading, loadStaticData } = useData();
   const [mode, setMode] = useState<AppMode>(AppMode.ROLE_SELECT);
   const [editingLesson, setEditingLesson] = useState<Lesson | undefined>(undefined);
   
-  // Teacher Auth State
+  // Teacher Auth State - GUARD
+  const [isTeacherAuthenticated, setIsTeacherAuthenticated] = useState(false);
+  
   const [isTeacherLoginVisible, setIsTeacherLoginVisible] = useState(false);
   const [teacherPin, setTeacherPin] = useState('');
   const [pinError, setPinError] = useState('');
@@ -74,32 +74,25 @@ const AppLogic: React.FC = () => {
         const dataFileName = urlParams.get('data') || 'student_data.json';
         
         // 2. Attempt to fetch static data (Deployed Mode)
-        // We add a timestamp query param to bypass browser caching (critical for file-based CMS)
         try {
             const res = await fetch(`/${dataFileName}?v=${new Date().getTime()}`);
             if (res.ok) {
                 const data: ClassroomData = await res.json();
-                console.log(`Static data loaded from ${dataFileName}`, data);
-                // Load data into context (sets isReadOnly=true)
                 loadStaticData(data);
-            } else {
-                console.warn(`${dataFileName} not found (404) or failed to load.`);
             }
         } catch (e) {
             console.log("Fetch error (offline/local). Using local DB data.");
         }
         
         // 3. Auto-enter Student Portal if ID is present
-        // This runs REGARDLESS of whether static data fetch worked.
         if (sId) {
             setStudentIdFromUrl(sId);
             setMode(AppMode.STUDENT_PORTAL);
-        }
-        
-        // Handle teacher shortcut
-        if (window.location.hash === '#/teacher') {
-            window.location.hash = '';
-            setIsTeacherLoginVisible(true);
+        } else {
+             // Handle teacher shortcut via hash, but ONLY show login, don't auth
+             if (window.location.hash === '#/teacher') {
+                setIsTeacherLoginVisible(true);
+             }
         }
     };
     
@@ -109,18 +102,51 @@ const AppLogic: React.FC = () => {
     }
   }, [isLoading]);
 
+  // Handle Browser Back Button (Popstate)
+  useEffect(() => {
+    const handlePopState = () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const sId = urlParams.get('studentId');
+
+        if (sId) {
+            // If URL has student ID, force student portal
+            setMode(AppMode.STUDENT_PORTAL);
+            setStudentIdFromUrl(sId);
+        } else {
+            // If we are in a teacher mode but lost auth (or navigated back to root), reset
+            // Or if we were in student mode and went back to root
+            if (mode === AppMode.STUDENT_PORTAL) {
+                setMode(AppMode.ROLE_SELECT);
+            }
+        }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [mode]);
+
   const navigate = (newMode: AppMode, data?: any) => {
+    // Security Check: Prevent navigating to Teacher Dashboard without Auth
+    if ((newMode === AppMode.TEACHER_DASHBOARD || newMode === AppMode.TEACHER_EDITOR) && !isTeacherAuthenticated) {
+        setMode(AppMode.ROLE_SELECT);
+        setIsTeacherLoginVisible(true);
+        return;
+    }
+
     setMode(newMode);
+    
     if (newMode === AppMode.TEACHER_EDITOR) {
       setEditingLesson(data);
+    } else if (newMode === AppMode.TEACHER_DASHBOARD) {
+        // Clear editing lesson so if we go back to create, it's clean
+        setEditingLesson(undefined);
     }
     
-    if (newMode === AppMode.TEACHER_DASHBOARD) window.location.hash = '/teacher';
-    
     if (newMode === AppMode.ROLE_SELECT) {
-      window.location.hash = '';
+      window.history.pushState(null, '', window.location.pathname); // Clear params
       setIsTeacherLoginVisible(false);
       setTeacherPin('');
+      setIsTeacherAuthenticated(false); // Log out
     }
   };
 
@@ -129,6 +155,7 @@ const AppLogic: React.FC = () => {
     if (teacherPin === '2110') {
         setPinError('');
         setTeacherPin('');
+        setIsTeacherAuthenticated(true); // Grant Access
         setIsTeacherLoginVisible(false);
         navigate(AppMode.TEACHER_DASHBOARD);
     } else {
@@ -146,56 +173,68 @@ const AppLogic: React.FC = () => {
     );
   }
 
+  // Login Screen Component
+  const renderTeacherLogin = () => (
+     <div className="min-h-screen bg-gradient-to-br from-teal-500 to-emerald-700 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full animate-fade-in">
+          <div className="text-center mb-6">
+            <div className="bg-teal-100 text-teal-600 p-3 rounded-full inline-block mb-3">
+                <Lock size={32} />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800">Teacher Access</h2>
+            <p className="text-gray-500 text-sm">Please enter the access code to continue.</p>
+          </div>
+
+          <form onSubmit={handleTeacherLoginSubmit} className="space-y-4">
+             <div>
+                <input 
+                    type="password" 
+                    autoFocus
+                    placeholder="Enter Code"
+                    className="w-full text-center text-2xl tracking-widest border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-teal-500 outline-none"
+                    value={teacherPin}
+                    onChange={(e) => setTeacherPin(e.target.value)}
+                />
+                {pinError && <p className="text-red-500 text-sm text-center mt-2">{pinError}</p>}
+             </div>
+             
+             <button 
+                type="submit"
+                className="w-full bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 transition"
+             >
+                Verify Access
+             </button>
+             <button 
+                type="button"
+                onClick={() => {
+                    setIsTeacherLoginVisible(false);
+                    setTeacherPin('');
+                    setPinError('');
+                }}
+                className="w-full text-gray-500 py-2 hover:text-gray-700 text-sm"
+             >
+                Cancel
+             </button>
+          </form>
+        </div>
+      </div>
+  );
+
   const renderContent = () => {
+    // Global Guard: If in Teacher Mode but not authenticated, show login or role select
+    if ((mode === AppMode.TEACHER_DASHBOARD || mode === AppMode.TEACHER_EDITOR) && !isTeacherAuthenticated) {
+        if (isTeacherLoginVisible) return renderTeacherLogin();
+        // Fallback to role select if we somehow got here
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+               <button onClick={() => setMode(AppMode.ROLE_SELECT)} className="text-teal-600 underline">Return to Home</button>
+            </div>
+        );
+    }
+
     switch (mode) {
       case AppMode.ROLE_SELECT:
-        if (isTeacherLoginVisible) {
-          return (
-             <div className="min-h-screen bg-gradient-to-br from-teal-500 to-emerald-700 flex items-center justify-center p-4">
-                <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full animate-fade-in">
-                  <div className="text-center mb-6">
-                    <div className="bg-teal-100 text-teal-600 p-3 rounded-full inline-block mb-3">
-                        <Lock size={32} />
-                    </div>
-                    <h2 className="text-2xl font-bold text-gray-800">Teacher Access</h2>
-                    <p className="text-gray-500 text-sm">Please enter the access code to continue.</p>
-                  </div>
-
-                  <form onSubmit={handleTeacherLoginSubmit} className="space-y-4">
-                     <div>
-                        <input 
-                            type="password" 
-                            autoFocus
-                            placeholder="Enter Code"
-                            className="w-full text-center text-2xl tracking-widest border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-teal-500 outline-none"
-                            value={teacherPin}
-                            onChange={(e) => setTeacherPin(e.target.value)}
-                        />
-                        {pinError && <p className="text-red-500 text-sm text-center mt-2">{pinError}</p>}
-                     </div>
-                     
-                     <button 
-                        type="submit"
-                        className="w-full bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 transition"
-                     >
-                        Verify Access
-                     </button>
-                     <button 
-                        type="button"
-                        onClick={() => {
-                            setIsTeacherLoginVisible(false);
-                            setTeacherPin('');
-                            setPinError('');
-                        }}
-                        className="w-full text-gray-500 py-2 hover:text-gray-700 text-sm"
-                     >
-                        Cancel
-                     </button>
-                  </form>
-                </div>
-              </div>
-          );
-        }
+        if (isTeacherLoginVisible) return renderTeacherLogin();
 
         return (
           <div className="min-h-screen bg-gradient-to-br from-teal-500 to-emerald-700 flex items-center justify-center p-4">
@@ -232,9 +271,6 @@ const AppLogic: React.FC = () => {
                     <p className="text-sm text-gray-600 mb-2">
                         Students should use the <strong>personal link</strong> provided by the teacher to access their exercises directly.
                     </p>
-                    <p className="text-xs text-gray-400">
-                        (If you are testing, please use the Teacher Dashboard to generate a student link)
-                    </p>
                 </div>
 
               </div>
@@ -246,7 +282,15 @@ const AppLogic: React.FC = () => {
         return <TeacherDashboard onNavigate={navigate} />;
       
       case AppMode.TEACHER_EDITOR:
-        return <LessonEditor onNavigate={navigate} editLesson={editingLesson} />;
+        // FIX BUG 1: The key prop forces React to remount the component when the ID changes
+        // This ensures state (sentences, titles) is completely reset when switching from "Edit A" to "Create New"
+        return (
+            <LessonEditor 
+                key={editingLesson ? editingLesson.id : 'create-new-lesson'} 
+                onNavigate={navigate} 
+                editLesson={editingLesson} 
+            />
+        );
       
       case AppMode.STUDENT_PORTAL:
         return (

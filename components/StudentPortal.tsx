@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import { Lesson } from '../types';
-import { ArrowLeft, Play, Pause, Download, Volume2, User, FileJson, Clock, BookOpen, Trash2, Printer, CheckCircle, AlertOctagon, Lightbulb, GraduationCap } from 'lucide-react';
+import { ArrowLeft, Pause, Volume2, BookOpen, Trash2, Printer, CheckCircle, AlertOctagon, Lightbulb, GraduationCap } from 'lucide-react';
 
 interface Props {
   onLogout: () => void;
@@ -30,6 +30,37 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage, studentId }) 
   const currentStudent = studentId ? students.find(s => s.id === studentId) : null;
   const isInvalidStudent = studentId && !currentStudent;
   const isDataMissing = students.length === 0;
+
+  // FIX: Handle Mobile Back Button to close Lesson Detail instead of leaving page
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+        // If we are currently viewing a lesson, the back button should close it
+        if (activeLesson) {
+            setActiveLesson(null);
+        }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activeLesson]);
+
+  const handleOpenLesson = (lesson: Lesson) => {
+      // Push state so back button works
+      window.history.pushState({ view: 'lesson', id: lesson.id }, '', window.location.search);
+      setActiveLesson(lesson);
+  };
+
+  const handleCloseLesson = () => {
+      // Go back in history to remove the pushed state, which will trigger popstate
+      // or simply reset state if history is messy. 
+      // Safe bet: just reset state, and replace history if needed or let user hit back again.
+      // Better UX: strict back.
+      if (window.history.state && window.history.state.view === 'lesson') {
+          window.history.back();
+      } else {
+          setActiveLesson(null);
+      }
+  };
 
   // Determine which lessons to show
   const displayedLessons = React.useMemo(() => {
@@ -160,7 +191,7 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage, studentId }) 
 
         <div className="bg-white shadow-sm sticky top-0 z-10 px-4 py-3 flex justify-between items-center print:hidden">
           <button 
-            onClick={() => setActiveLesson(null)}
+            onClick={handleCloseLesson}
             className="flex items-center gap-2 text-gray-600 hover:text-teal-600 font-medium"
           >
             <ArrowLeft size={20} /> Library
@@ -315,7 +346,7 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage, studentId }) 
             {displayedLessons.map(lesson => (
               <div
                 key={lesson.id}
-                onClick={() => setActiveLesson(lesson)}
+                onClick={() => handleOpenLesson(lesson)}
                 className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-all text-left border-l-4 border-orange-400 group cursor-pointer relative"
               >
                 <div className="flex justify-between items-start mb-2">
