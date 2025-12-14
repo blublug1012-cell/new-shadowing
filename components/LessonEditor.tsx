@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
-import { generateCantoneseLesson, generateCantoneseSpeech } from '../services/geminiService';
+import { generateCantoneseLesson } from '../services/geminiService';
 import { Lesson, Sentence, AppMode } from '../types';
 import AudioRecorder from './AudioRecorder';
-import { ArrowLeft, Wand2, Save, Loader2, Image as ImageIcon, Youtube, MessageSquareText, Mic, Bot, PenLine, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Wand2, Save, Loader2, Image as ImageIcon, Youtube, MessageSquareText, Mic } from 'lucide-react';
 
 interface Props {
   onNavigate: (mode: AppMode) => void;
@@ -28,12 +28,8 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
   
   // UI State
   const [isProcessing, setIsProcessing] = useState(false);
-  const [processingAudioId, setProcessingAudioId] = useState<string | null>(null);
   const [step, setStep] = useState<1 | 2>(editLesson ? 2 : 1);
   
-  // Toggle for TTS Edit Mode per sentence
-  const [expandedTTS, setExpandedTTS] = useState<Record<string, boolean>>({});
-
   const handleAIProcess = async () => {
     if (!inputText.trim()) return;
     setIsProcessing(true);
@@ -46,30 +42,6 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  const handleGenerateOneTTS = async (sentence: Sentence) => {
-      setProcessingAudioId(sentence.id);
-      try {
-          // Use replacement text if it exists (for homophone fixing), otherwise use standard text
-          const textToSpeak = sentence.ttsReplacementText && sentence.ttsReplacementText.trim() !== ''
-            ? sentence.ttsReplacementText
-            : sentence.words.map(w => w.char).join('');
-            
-          const audioBase64 = await generateCantoneseSpeech(textToSpeak);
-          updateSentence(sentence.id, { audioBase64 });
-      } catch (e: any) {
-          alert("TTS Error: " + e.message);
-      } finally {
-          setProcessingAudioId(null);
-      }
-  };
-
-  const toggleTTSEdit = (id: string) => {
-      setExpandedTTS(prev => ({
-          ...prev,
-          [id]: !prev[id]
-      }));
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -163,6 +135,7 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
         <div className="space-y-6 animate-fade-in">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Cantonese Text Input</label>
+            <p className="text-xs text-gray-500 mb-2">The AI will analyze this text to generate Jyutping and translations. Audio recording happens in the next step.</p>
             <textarea
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
@@ -246,7 +219,7 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
                <h2 className="text-xl font-bold text-gray-800">Edit & Record</h2>
-               <p className="text-sm text-gray-500">Record or Generate audio.</p>
+               <p className="text-sm text-gray-500">Record your own voice for students to follow.</p>
             </div>
 
             {sentences.map((sentence, sIdx) => (
@@ -289,11 +262,11 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
                     />
                 </div>
 
-                {/* Main Audio Recording & TTS */}
+                {/* Main Audio Recording (Manual Only) */}
                 <div className="bg-gray-50 p-3 rounded-lg mb-3">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between">
                         <span className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-1">
-                            <Mic size={14}/> Reading Audio
+                            <Mic size={14}/> Reading Recording
                         </span>
                         
                         {/* Audio Controls */}
@@ -302,48 +275,11 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
                                 existingAudio={sentence.audioBase64} 
                                 onSave={(base64) => updateSentence(sentence.id, { audioBase64: base64 })} 
                             />
-                            
-                            <div className="h-4 w-px bg-gray-300 mx-1"></div>
-                            
-                            <button
-                                onClick={() => handleGenerateOneTTS(sentence)}
-                                disabled={processingAudioId === sentence.id}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-100 text-indigo-700 hover:bg-indigo-200 rounded-lg text-xs font-bold transition disabled:opacity-50"
-                                title="Generate AI Pronunciation"
-                            >
-                                {processingAudioId === sentence.id ? <Loader2 size={14} className="animate-spin"/> : <Bot size={14}/>}
-                                AI Read
-                            </button>
-                            
-                            <button
-                                onClick={() => toggleTTSEdit(sentence.id)}
-                                className={`p-1.5 rounded-lg transition ${expandedTTS[sentence.id] ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-                                title="Fix Pronunciation (Homophones)"
-                            >
-                                <PenLine size={16}/>
-                            </button>
                         </div>
                     </div>
-
-                    {/* TTS Substitution Input (Hidden by default) */}
-                    {expandedTTS[sentence.id] && (
-                        <div className="mt-2 pl-3 border-l-2 border-indigo-200 animate-fade-in">
-                            <label className="block text-[10px] uppercase font-bold text-indigo-500 mb-1">
-                                Pronunciation Fix (Homophones) / 讀音修正
-                            </label>
-                            <p className="text-[10px] text-gray-400 mb-2">
-                                If AI reads it wrong, type a homophone here (e.g. use "嫲" for "媽" to change tone).
-                                <br/>Student sees original text, but hears this text.
-                            </p>
-                            <input
-                                type="text"
-                                value={sentence.ttsReplacementText || ''}
-                                onChange={(e) => updateSentence(sentence.id, { ttsReplacementText: e.target.value })}
-                                className="w-full text-sm p-1.5 border border-indigo-100 rounded focus:ring-1 focus:ring-indigo-300 outline-none"
-                                placeholder={sentence.words.map(w => w.char).join('')}
-                            />
-                        </div>
-                    )}
+                    <p className="text-[10px] text-gray-400 mt-1">
+                        Click the microphone to record your own pronunciation.
+                    </p>
                 </div>
 
                 {/* Explanation Section */}
