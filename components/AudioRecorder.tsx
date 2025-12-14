@@ -14,6 +14,10 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onSave, existingAudio }) 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Refs for audio processing to boost volume
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const sourceStreamRef = useRef<MediaStream | null>(null);
 
   // Sync state if prop changes (e.g. AI generates new audio)
   useEffect(() => {
@@ -22,12 +26,44 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onSave, existingAudio }) 
 
   const startRecording = async () => {
     try {
+      // 1. Get the raw microphone stream
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorderRef.current = new MediaRecorder(stream);
+      sourceStreamRef.current = stream;
+
+      // 2. Setup Web Audio API to process the audio (Boost volume)
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const audioContext = new AudioContextClass();
+      audioContextRef.current = audioContext;
+
+      const source = audioContext.createMediaStreamSource(stream);
+      
+      // 2a. Add a Compressor (Standardizes volume, prevents distortion when we boost it)
+      const compressor = audioContext.createDynamicsCompressor();
+      compressor.threshold.value = -24;
+      compressor.knee.value = 30;
+      compressor.ratio.value = 12;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.25;
+
+      // 2b. Add a Gain Node (Volume Booster)
+      const gainNode = audioContext.createGain();
+      // Boost volume by 300% (3.0). Standard mics are usually too quiet compared to YouTube.
+      gainNode.gain.value = 3.0; 
+
+      // 2c. Connect the graph: Source -> Compressor -> Gain -> Destination
+      const destination = audioContext.createMediaStreamDestination();
+      source.connect(compressor);
+      compressor.connect(gainNode);
+      gainNode.connect(destination);
+
+      // 3. Record from the PROCESSED stream (destination), not the raw stream
+      mediaRecorderRef.current = new MediaRecorder(destination.stream);
       audioChunksRef.current = [];
 
       mediaRecorderRef.current.ondataavailable = (event) => {
-        audioChunksRef.current.push(event.data);
+        if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+        }
       };
 
       mediaRecorderRef.current.onstop = () => {
@@ -42,6 +78,17 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onSave, existingAudio }) 
           const base64String = reader.result as string;
           onSave(base64String);
         };
+        
+        // Cleanup Audio Context
+        if (audioContextRef.current) {
+            audioContextRef.current.close();
+            audioContextRef.current = null;
+        }
+        // Stop all tracks on the source stream to turn off the mic light
+        if (sourceStreamRef.current) {
+            sourceStreamRef.current.getTracks().forEach(track => track.stop());
+            sourceStreamRef.current = null;
+        }
       };
 
       mediaRecorderRef.current.start();
@@ -56,8 +103,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onSave, existingAudio }) 
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
-      // Stop all tracks to release microphone
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      // Actual cleanup happens in onstop event above
     }
   };
 
