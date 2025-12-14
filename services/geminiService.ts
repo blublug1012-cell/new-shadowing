@@ -1,60 +1,65 @@
-import { GoogleGenAI, Type, Modality } from "@google/genai";
+import { GoogleGenAI, Type, HarmCategory, HarmBlockThreshold, Modality } from "@google/genai";
 import { Sentence, Word } from "../types";
 
 // Helper to convert raw PCM to WAV so browsers can play it
 // Gemini TTS returns 24kHz, 1 channel, 16-bit PCM by default
 const addWavHeader = (pcmBase64: string): string => {
-  const binaryString = atob(pcmBase64);
-  const len = binaryString.length;
-  const buffer = new ArrayBuffer(len);
-  const view = new Uint8Array(buffer);
-  for (let i = 0; i < len; i++) {
-    view[i] = binaryString.charCodeAt(i);
+  try {
+    const binaryString = atob(pcmBase64);
+    const len = binaryString.length;
+    const buffer = new ArrayBuffer(len);
+    const view = new Uint8Array(buffer);
+    for (let i = 0; i < len; i++) {
+      view[i] = binaryString.charCodeAt(i);
+    }
+
+    const numChannels = 1;
+    const sampleRate = 24000;
+    const bitsPerSample = 16;
+    const blockAlign = numChannels * (bitsPerSample / 8);
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = len;
+
+    const header = new ArrayBuffer(44);
+    const dv = new DataView(header);
+
+    // RIFF chunk descriptor
+    writeString(dv, 0, 'RIFF');
+    dv.setUint32(4, 36 + dataSize, true);
+    writeString(dv, 8, 'WAVE');
+
+    // fmt sub-chunk
+    writeString(dv, 12, 'fmt ');
+    dv.setUint32(16, 16, true); // Subchunk1Size (16 for PCM)
+    dv.setUint16(20, 1, true); // AudioFormat (1 for PCM)
+    dv.setUint16(22, numChannels, true);
+    dv.setUint32(24, sampleRate, true);
+    dv.setUint32(28, byteRate, true);
+    dv.setUint16(32, blockAlign, true);
+    dv.setUint16(34, bitsPerSample, true);
+
+    // data sub-chunk
+    writeString(dv, 36, 'data');
+    dv.setUint32(40, dataSize, true);
+
+    // Concatenate header and data
+    const wavBuffer = new Uint8Array(header.byteLength + dataSize);
+    wavBuffer.set(new Uint8Array(header), 0);
+    wavBuffer.set(view, header.byteLength);
+
+    // Convert back to base64
+    let binary = '';
+    const bytes = new Uint8Array(wavBuffer);
+    const l = bytes.byteLength;
+    for (let i = 0; i < l; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    
+    return 'data:audio/wav;base64,' + btoa(binary);
+  } catch (e) {
+    console.error("Error creating WAV header:", e);
+    throw new Error("Audio processing failed");
   }
-
-  const numChannels = 1;
-  const sampleRate = 24000;
-  const bitsPerSample = 16;
-  const blockAlign = numChannels * (bitsPerSample / 8);
-  const byteRate = sampleRate * blockAlign;
-  const dataSize = len;
-
-  const header = new ArrayBuffer(44);
-  const dv = new DataView(header);
-
-  // RIFF chunk descriptor
-  writeString(dv, 0, 'RIFF');
-  dv.setUint32(4, 36 + dataSize, true);
-  writeString(dv, 8, 'WAVE');
-
-  // fmt sub-chunk
-  writeString(dv, 12, 'fmt ');
-  dv.setUint32(16, 16, true); // Subchunk1Size (16 for PCM)
-  dv.setUint16(20, 1, true); // AudioFormat (1 for PCM)
-  dv.setUint16(22, numChannels, true);
-  dv.setUint32(24, sampleRate, true);
-  dv.setUint32(28, byteRate, true);
-  dv.setUint16(32, blockAlign, true);
-  dv.setUint16(34, bitsPerSample, true);
-
-  // data sub-chunk
-  writeString(dv, 36, 'data');
-  dv.setUint32(40, dataSize, true);
-
-  // Concatenate header and data
-  const wavBuffer = new Uint8Array(header.byteLength + dataSize);
-  wavBuffer.set(new Uint8Array(header), 0);
-  wavBuffer.set(view, header.byteLength);
-
-  // Convert back to base64
-  let binary = '';
-  const bytes = new Uint8Array(wavBuffer);
-  const l = bytes.byteLength;
-  for (let i = 0; i < l; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  
-  return 'data:audio/wav;base64,' + btoa(binary);
 };
 
 function writeString(view: DataView, offset: number, string: string) {
@@ -161,16 +166,25 @@ export const generateCantoneseSpeech = async (text: string): Promise<string> => 
   const model = "gemini-2.5-flash-preview-tts";
 
   try {
+    console.log("[TTS Request] Generating speech for:", text.substring(0, 20) + "...");
+
     // Ensure contents is an array of parts, as expected by the API
     const response = await ai.models.generateContent({
       model: model,
       contents: [{ parts: [{ text: text }] }],
       config: {
-        // Safe check for Modality enum, fallback to string 'AUDIO' if needed
-        responseModalities: [Modality?.AUDIO || 'AUDIO'],
+        responseModalities: [Modality.AUDIO], 
+        // Add safety settings to prevent false positives for 'OTHER' blocks
+        safetySettings: [
+          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        ],
         speechConfig: {
             voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Kore' },
+              // Switch to Puck to see if it's more stable for this locale/request
+              prebuiltVoiceConfig: { voiceName: 'Puck' },
             },
         },
       },
@@ -184,18 +198,19 @@ export const generateCantoneseSpeech = async (text: string): Promise<string> => 
       return addWavHeader(base64Audio);
     }
 
-    // If no audio, check if there's a text refusal or safety/finish reason
-    const textPart = response.candidates?.[0]?.content?.parts?.[0]?.text;
-    const finishReason = response.candidates?.[0]?.finishReason;
+    // Diagnostic logging for "OTHER" errors
+    const candidate = response.candidates?.[0];
+    const finishReason = candidate?.finishReason;
+    const textPart = candidate?.content?.parts?.[0]?.text;
+
+    console.warn("[TTS Failure Debug]", { finishReason, textPart, candidate });
 
     if (textPart) {
-      console.warn("TTS Model returned text instead of audio:", textPart);
-      throw new Error(`Model returned text: ${textPart}`);
+      throw new Error(`Model returned text instead of audio: ${textPart.substring(0, 50)}...`);
     }
 
     if (finishReason) {
-       console.warn("TTS Model finish reason:", finishReason);
-       throw new Error(`Generation stopped: ${finishReason}`);
+       throw new Error(`Generation stopped. Reason: ${finishReason}. (Check console for details)`);
     }
 
     throw new Error("No audio data returned from API (Empty response)");
