@@ -1,17 +1,78 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { Sentence, Word } from "../types";
 
-export const generateCantoneseLesson = async (text: string): Promise<Sentence[]> => {
-  // Use Vite's standard env var injection
-  const apiKey = import.meta.env.VITE_API_KEY;
-  
-  if (!apiKey || apiKey === "undefined" || apiKey === "") {
-    const msg = "API Key Error: 'VITE_API_KEY' is missing.\n\nPlease check your Netlify Environment Variables.";
-    console.error(msg);
-    throw new Error(msg);
+// Helper to convert raw PCM to WAV so browsers can play it
+// Gemini TTS returns 24kHz, 1 channel, 16-bit PCM by default
+const addWavHeader = (pcmBase64: string): string => {
+  const binaryString = atob(pcmBase64);
+  const len = binaryString.length;
+  const buffer = new ArrayBuffer(len);
+  const view = new Uint8Array(buffer);
+  for (let i = 0; i < len; i++) {
+    view[i] = binaryString.charCodeAt(i);
+  }
+
+  const numChannels = 1;
+  const sampleRate = 24000;
+  const bitsPerSample = 16;
+  const blockAlign = numChannels * (bitsPerSample / 8);
+  const byteRate = sampleRate * blockAlign;
+  const dataSize = len;
+
+  const header = new ArrayBuffer(44);
+  const dv = new DataView(header);
+
+  // RIFF chunk descriptor
+  writeString(dv, 0, 'RIFF');
+  dv.setUint32(4, 36 + dataSize, true);
+  writeString(dv, 8, 'WAVE');
+
+  // fmt sub-chunk
+  writeString(dv, 12, 'fmt ');
+  dv.setUint32(16, 16, true); // Subchunk1Size (16 for PCM)
+  dv.setUint16(20, 1, true); // AudioFormat (1 for PCM)
+  dv.setUint16(22, numChannels, true);
+  dv.setUint32(24, sampleRate, true);
+  dv.setUint32(28, byteRate, true);
+  dv.setUint16(32, blockAlign, true);
+  dv.setUint16(34, bitsPerSample, true);
+
+  // data sub-chunk
+  writeString(dv, 36, 'data');
+  dv.setUint32(40, dataSize, true);
+
+  // Concatenate header and data
+  const wavBuffer = new Uint8Array(header.byteLength + dataSize);
+  wavBuffer.set(new Uint8Array(header), 0);
+  wavBuffer.set(view, header.byteLength);
+
+  // Convert back to base64
+  let binary = '';
+  const bytes = new Uint8Array(wavBuffer);
+  const l = bytes.byteLength;
+  for (let i = 0; i < l; i++) {
+    binary += String.fromCharCode(bytes[i]);
   }
   
-  const ai = new GoogleGenAI({ apiKey: apiKey });
+  return 'data:audio/wav;base64,' + btoa(binary);
+};
+
+function writeString(view: DataView, offset: number, string: string) {
+  for (let i = 0; i < string.length; i++) {
+    view.setUint8(offset + i, string.charCodeAt(i));
+  }
+}
+
+const getAIClient = () => {
+  const apiKey = import.meta.env.VITE_API_KEY;
+  if (!apiKey || apiKey === "undefined" || apiKey === "") {
+    throw new Error("API Key Error: 'VITE_API_KEY' is missing.");
+  }
+  return new GoogleGenAI({ apiKey: apiKey });
+};
+
+export const generateCantoneseLesson = async (text: string): Promise<Sentence[]> => {
+  const ai = getAIClient();
   const model = "gemini-2.5-flash";
   
   const prompt = `
@@ -71,24 +132,17 @@ export const generateCantoneseLesson = async (text: string): Promise<Sentence[]>
 
     if (response.text) {
       let cleanText = response.text.trim();
-      // Remove markdown code blocks if present
       if (cleanText.startsWith('```json')) {
         cleanText = cleanText.replace(/^```json/, '').replace(/```$/, '');
       } else if (cleanText.startsWith('```')) {
         cleanText = cleanText.replace(/^```/, '').replace(/```$/, '');
       }
 
-      try {
-        const data = JSON.parse(cleanText);
-        return data.map((s: any, idx: number) => ({
-          ...s,
-          id: s.id || `sent-${Date.now()}-${idx}`
-        }));
-      } catch (e) {
-        console.error("JSON Parse Error:", e);
-        console.error("Raw Text received:", response.text);
-        throw new Error("AI returned invalid data format. Please try again.");
-      }
+      const data = JSON.parse(cleanText);
+      return data.map((s: any, idx: number) => ({
+        ...s,
+        id: s.id || `sent-${Date.now()}-${idx}`
+      }));
     }
   } catch (error: any) {
     console.error("Gemini API Error details:", error);
@@ -96,4 +150,40 @@ export const generateCantoneseLesson = async (text: string): Promise<Sentence[]>
   }
 
   throw new Error("No response from AI.");
+};
+
+export const generateCantoneseSpeech = async (text: string): Promise<string> => {
+  const ai = getAIClient();
+  const model = "gemini-2.5-flash-preview-tts";
+
+  try {
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: { parts: [{ text: text }] },
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+            voiceConfig: {
+              // 'Kore' is a standard voice often used for demos, but the model supports locale matching
+              // based on the text input (Cantonese characters).
+              prebuiltVoiceConfig: { voiceName: 'Kore' },
+            },
+        },
+      },
+    });
+
+    // Extract raw PCM base64
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    
+    if (!base64Audio) {
+      throw new Error("No audio data returned from API");
+    }
+
+    // Convert to WAV so browser can play it
+    return addWavHeader(base64Audio);
+
+  } catch (error: any) {
+    console.error("TTS Error:", error);
+    throw new Error("Failed to generate speech: " + error.message);
+  }
 };

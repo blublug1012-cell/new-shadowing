@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { Mic, Square, Trash2, Play, RefreshCw } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Mic, Square, Trash2, Play, RefreshCw, Pause } from 'lucide-react';
 
 interface AudioRecorderProps {
   onSave: (base64Audio: string) => void;
@@ -14,6 +14,11 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onSave, existingAudio }) 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+
+  // Sync state if prop changes (e.g. AI generates new audio)
+  useEffect(() => {
+    setAudioUrl(existingAudio || null);
+  }, [existingAudio]);
 
   const startRecording = async () => {
     try {
@@ -68,6 +73,13 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onSave, existingAudio }) 
       setIsPlaying(true);
     }
   };
+  
+  const pauseAudio = () => {
+      if (audioPlayerRef.current) {
+          audioPlayerRef.current.pause();
+          setIsPlaying(false);
+      }
+  };
 
   const deleteAudio = () => {
     setAudioUrl(null);
@@ -76,6 +88,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onSave, existingAudio }) 
       audioPlayerRef.current.pause();
       audioPlayerRef.current = null;
     }
+    setIsPlaying(false);
   };
 
   return (
@@ -103,18 +116,17 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onSave, existingAudio }) 
       {audioUrl && (
         <>
           <button
-            onClick={playAudio}
-            disabled={isPlaying}
-            className={`p-2 rounded-full ${isPlaying ? 'bg-green-100 text-green-400' : 'bg-green-100 text-green-600 hover:bg-green-200'} transition-colors`}
-            title="Play Recording"
+            onClick={isPlaying ? pauseAudio : playAudio}
+            className={`p-2 rounded-full ${isPlaying ? 'bg-green-600 text-white' : 'bg-green-100 text-green-600 hover:bg-green-200'} transition-colors`}
+            title={isPlaying ? "Pause" : "Play"}
           >
-            <Play size={20} fill="currentColor" />
+            {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
           </button>
           
           <button
             onClick={deleteAudio}
             className="p-2 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors"
-            title="Re-record"
+            title="Delete / Re-record"
           >
             <RefreshCw size={18} />
           </button>

@@ -10,6 +10,7 @@ export interface Sentence {
   words: Word[];
   english: string;
   audioBase64?: string; // Teacher's main reading recording
+  ttsReplacementText?: string; // Text used specifically for TTS (homophone substitution)
   explanationText?: string; // Teacher's vocabulary/grammar explanation
   explanationAudio?: string; // Teacher's explanation recording
 }
