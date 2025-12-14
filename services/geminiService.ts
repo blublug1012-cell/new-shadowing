@@ -153,37 +153,56 @@ export const generateCantoneseLesson = async (text: string): Promise<Sentence[]>
 };
 
 export const generateCantoneseSpeech = async (text: string): Promise<string> => {
+  if (!text || !text.trim()) {
+    throw new Error("Text is empty");
+  }
+
   const ai = getAIClient();
   const model = "gemini-2.5-flash-preview-tts";
 
   try {
+    // Ensure contents is an array of parts, as expected by the API
     const response = await ai.models.generateContent({
       model: model,
-      contents: { parts: [{ text: text }] },
+      contents: [{ parts: [{ text: text }] }],
       config: {
-        responseModalities: [Modality.AUDIO],
+        // Safe check for Modality enum, fallback to string 'AUDIO' if needed
+        responseModalities: [Modality?.AUDIO || 'AUDIO'],
         speechConfig: {
             voiceConfig: {
-              // 'Kore' is a standard voice often used for demos, but the model supports locale matching
-              // based on the text input (Cantonese characters).
               prebuiltVoiceConfig: { voiceName: 'Kore' },
             },
         },
       },
     });
 
-    // Extract raw PCM base64
+    // Check for inline data (audio)
     const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     
-    if (!base64Audio) {
-      throw new Error("No audio data returned from API");
+    if (base64Audio) {
+      // Convert to WAV so browser can play it
+      return addWavHeader(base64Audio);
     }
 
-    // Convert to WAV so browser can play it
-    return addWavHeader(base64Audio);
+    // If no audio, check if there's a text refusal or safety/finish reason
+    const textPart = response.candidates?.[0]?.content?.parts?.[0]?.text;
+    const finishReason = response.candidates?.[0]?.finishReason;
+
+    if (textPart) {
+      console.warn("TTS Model returned text instead of audio:", textPart);
+      throw new Error(`Model returned text: ${textPart}`);
+    }
+
+    if (finishReason) {
+       console.warn("TTS Model finish reason:", finishReason);
+       throw new Error(`Generation stopped: ${finishReason}`);
+    }
+
+    throw new Error("No audio data returned from API (Empty response)");
 
   } catch (error: any) {
     console.error("TTS Error:", error);
-    throw new Error("Failed to generate speech: " + error.message);
+    // Provide a more user-friendly error if possible
+    throw new Error(error.message || "Failed to generate speech");
   }
 };
