@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useState, useEffect, Component, ErrorInfo, ReactNode, useRef } from 'react';
 import { DataProvider, useData } from './contexts/DataContext';
 import TeacherDashboard from './components/TeacherDashboard';
 import LessonEditor from './components/LessonEditor';
@@ -63,40 +63,54 @@ const AppLogic: React.FC = () => {
   
   // Student State
   const [studentIdFromUrl, setStudentIdFromUrl] = useState<string | null>(null);
+  
+  // Use a ref to track if we have already initialized from URL to prevent race conditions
+  const hasInitializedRef = useRef(false);
 
   // Check for Static Data (student_data.json) & URL params
   useEffect(() => {
     const init = async () => {
+        if (hasInitializedRef.current) return;
+
         // 1. Check URL for studentId AND custom data file
         const urlParams = new URLSearchParams(window.location.search);
         const sId = urlParams.get('studentId');
         // Default to student_data.json, but allow overriding via ?data=my_class.json
         const dataFileName = urlParams.get('data') || 'student_data.json';
         
-        // 2. Attempt to fetch static data (Deployed Mode)
-        try {
-            const res = await fetch(`/${dataFileName}?v=${new Date().getTime()}`);
-            if (res.ok) {
-                const data: ClassroomData = await res.json();
-                loadStaticData(data);
-            }
-        } catch (e) {
-            console.log("Fetch error (offline/local). Using local DB data.");
-        }
-        
-        // 3. Auto-enter Student Portal if ID is present
+        // IMMEDIATE ACTION: If studentId is present, force Student Portal immediately
+        // This prevents the "Teacher Login" or "Role Select" flash
         if (sId) {
+            console.log("Student ID found in URL, switching to Student Portal...");
             setStudentIdFromUrl(sId);
             setMode(AppMode.STUDENT_PORTAL);
         } else {
-             // Handle teacher shortcut via hash, but ONLY show login, don't auth
+             // Handle teacher shortcut via hash
              if (window.location.hash === '#/teacher') {
                 setIsTeacherLoginVisible(true);
              }
         }
+        
+        hasInitializedRef.current = true;
+
+        // 2. Attempt to fetch static data (Deployed Mode)
+        // We do this regardless of mode, just in case
+        try {
+            console.log(`Fetching data file: /${dataFileName}`);
+            const res = await fetch(`/${dataFileName}?v=${new Date().getTime()}`);
+            if (res.ok) {
+                const data: ClassroomData = await res.json();
+                console.log("Data file loaded successfully.");
+                loadStaticData(data);
+            } else {
+                console.warn("Data file fetch failed or not found (404). Using local DB.");
+            }
+        } catch (e) {
+            console.log("Fetch error (offline/local). Using local DB data.");
+        }
     };
     
-    // Only run if not already loading (initial mount)
+    // Only run if DataContext has finished its initial local DB check
     if (!isLoading) {
         init();
     }
@@ -113,8 +127,7 @@ const AppLogic: React.FC = () => {
             setMode(AppMode.STUDENT_PORTAL);
             setStudentIdFromUrl(sId);
         } else {
-            // If we are in a teacher mode but lost auth (or navigated back to root), reset
-            // Or if we were in student mode and went back to root
+            // If we go back to root, reset to Role Select
             if (mode === AppMode.STUDENT_PORTAL) {
                 setMode(AppMode.ROLE_SELECT);
             }
@@ -155,9 +168,11 @@ const AppLogic: React.FC = () => {
     if (teacherPin === '2110') {
         setPinError('');
         setTeacherPin('');
-        setIsTeacherAuthenticated(true); // Grant Access
+        
+        // FIX: Update state and mode manually to avoid async state race condition
+        setIsTeacherAuthenticated(true); 
         setIsTeacherLoginVisible(false);
-        navigate(AppMode.TEACHER_DASHBOARD);
+        setMode(AppMode.TEACHER_DASHBOARD); // Directly set mode, bypassing navigate() check
     } else {
         setPinError('Incorrect Access Code');
         setTeacherPin(''); 
@@ -221,12 +236,13 @@ const AppLogic: React.FC = () => {
   );
 
   const renderContent = () => {
-    // Global Guard: If in Teacher Mode but not authenticated, show login or role select
+    // Global Guard: If in Teacher Mode but not authenticated, show login
+    // NOTE: Student Portal mode intentionally bypasses this guard
     if ((mode === AppMode.TEACHER_DASHBOARD || mode === AppMode.TEACHER_EDITOR) && !isTeacherAuthenticated) {
         if (isTeacherLoginVisible) return renderTeacherLogin();
-        // Fallback to role select if we somehow got here
+        // Fallback
         return (
-            <div className="min-h-screen flex items-center justify-center">
+             <div className="min-h-screen flex items-center justify-center">
                <button onClick={() => setMode(AppMode.ROLE_SELECT)} className="text-teal-600 underline">Return to Home</button>
             </div>
         );
@@ -282,8 +298,6 @@ const AppLogic: React.FC = () => {
         return <TeacherDashboard onNavigate={navigate} />;
       
       case AppMode.TEACHER_EDITOR:
-        // FIX BUG 1: The key prop forces React to remount the component when the ID changes
-        // This ensures state (sentences, titles) is completely reset when switching from "Edit A" to "Create New"
         return (
             <LessonEditor 
                 key={editingLesson ? editingLesson.id : 'create-new-lesson'} 
