@@ -100,32 +100,26 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
       document.body.removeChild(link);
   };
 
-  // 2. Generate Link Logic (Updated to include data filename)
+  // 2. Generate Link Logic (Updated to be smarter about filenames)
   const copyStudentLink = (studentId: string, studentName: string) => {
       const baseUrl = window.location.origin + window.location.pathname;
       let url = `${baseUrl}?studentId=${studentId}`;
       
-      // Smart detection: 
-      // If we are currently in "Single Student" export mode for THIS student, use the current dataFileName (e.g., danny.json).
-      // If we are in "All" mode, use student_data.json.
-      // If we are in "Single" mode for SOMEONE ELSE, warn user or default to student_data.json? 
-      // Better strategy: Use the current configured filename IF it matches the context, otherwise fallback to standard.
-      
       let targetFile = 'student_data.json';
       
-      // If the user has explicitly configured a specific file export right now, assumes they want a link for THAT file.
-      // But we should be careful not to give Danny a link to Amy's file.
-      
-      if (exportScope === 'single' && selectedStudentForExport === studentId) {
-          targetFile = dataFileName;
-      } else if (exportScope === 'all') {
-          targetFile = dataFileName; // student_data.json or student_data_timestamp.json
+      if (exportScope === 'single') {
+          // If we are in "Single Student" mode
+          // 1. If this is the currently selected student for export, use the text input filename (user might have customized it)
+          if (selectedStudentForExport === studentId) {
+              targetFile = dataFileName;
+          } else {
+              // 2. Otherwise, assume the default convention for this student
+              const safeName = studentName.toLowerCase().replace(/[^a-z0-9]/g, '');
+              targetFile = `${safeName}.json`;
+          }
       } else {
-          // Fallback logic: If I'm generating a link for Amy, but I have "Danny" selected in export, 
-          // I should probably guess Amy's filename is amy.json? 
-          // Let's keep it simple: Just warn if mismatch.
-          const safeName = studentName.toLowerCase().replace(/[^a-z0-9]/g, '');
-          targetFile = `${safeName}.json`; // Best guess for "Student Mode" preference
+          // If in "All" mode, use the current filename ONLY if it's customized, otherwise default is cleaner
+          targetFile = dataFileName; 
       }
       
       if (targetFile !== 'student_data.json') {
@@ -135,7 +129,7 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
       navigator.clipboard.writeText(url).then(() => {
           let msg = `Link copied for ${studentName}!`;
           if (targetFile !== 'student_data.json') {
-              msg += `\n\nTarget File: ${targetFile}\nMake sure to upload this file!`;
+              msg += `\n\nTarget File: ${targetFile}\n(Make sure to upload ${targetFile} to the public folder)`;
           }
           alert(msg);
       });
@@ -523,6 +517,14 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
                             className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 shadow-sm hover:shadow-md transition-all"
                          >
                             <LinkIcon size={16}/> Copy Link
+                            <span className="text-[10px] bg-indigo-500 text-indigo-100 px-1 rounded ml-1 opacity-80 truncate max-w-[80px]">
+                                {exportScope === 'single' 
+                                    ? (selectedStudentForExport === student.id 
+                                        ? dataFileName 
+                                        : `${student.name.toLowerCase().replace(/[^a-z0-9]/g, '')}.json`)
+                                    : (dataFileName !== 'student_data.json' ? dataFileName : '')
+                                }
+                            </span>
                          </button>
                          <button
                             onClick={() => handleDeleteStudent(student.id, student.name)}
