@@ -66,11 +66,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const exportSystemData = async (): Promise<ClassroomData> => {
-    // Get fresh data from state
+    // CRITICAL FIX: Fetch directly from IndexedDB to ensure we export exactly what is saved.
+    // Relying on React state variables inside this closure might yield stale data
+    // if the user clicks export immediately after an update.
+    const dbLessons = await dbService.getAllLessons();
+    const dbStudents = await dbService.getAllStudents();
+
     return {
         generatedAt: Date.now(),
-        students: students,
-        lessons: lessons
+        students: dbStudents,
+        lessons: dbLessons
     };
   };
 

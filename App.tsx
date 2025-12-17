@@ -63,7 +63,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
 // Separate component to use hook
 const AppLogic: React.FC = () => {
-  const { isLoading, loadStaticData } = useData();
+  const { isLoading, loadStaticData, students } = useData();
   const [mode, setMode] = useState<AppMode>(AppMode.ROLE_SELECT);
   const [editingLesson, setEditingLesson] = useState<Lesson | undefined>(undefined);
   
@@ -105,12 +105,21 @@ const AppLogic: React.FC = () => {
                 if (res.ok) {
                     const data: ClassroomData = await res.json();
                     
-                    // SMART CHECK: Only load static data if the student exists in it.
-                    // Otherwise, assume we are testing a local student (Teacher Preview) and keep using local DB.
                     const studentExists = data.students?.some(s => s.id === sId);
                     
-                    if (studentExists) {
-                        console.log("Student found in static file. Loading static data.");
+                    // Logic: 
+                    // 1. If student exists in file -> Load file (Happy path)
+                    // 2. If student NOT in file, but we have NO local data (Pure student on phone) -> Load file anyway.
+                    //    This allows the UI to show "Student Not Found" (valid file, wrong ID) instead of "Data File Missing".
+                    // 3. If student NOT in file, but we HAVE local data (Teacher previewing) -> Do NOT load file. Use local data.
+                    const hasLocalData = students.length > 0;
+
+                    if (studentExists || !hasLocalData) {
+                        if (studentExists) {
+                             console.log("Student found in static file. Loading static data.");
+                        } else {
+                             console.warn("Student ID not found in file, but loading anyway for correct error handling (Student View).");
+                        }
                         loadStaticData(data);
                     } else {
                         console.warn("Student ID not found in remote file. Using local database (Teacher Preview Mode).");
