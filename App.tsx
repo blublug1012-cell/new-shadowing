@@ -4,7 +4,7 @@ import TeacherDashboard from './components/TeacherDashboard';
 import LessonEditor from './components/LessonEditor';
 import StudentPortal from './components/StudentPortal';
 import { AppMode, Lesson, ClassroomData } from './types';
-import { GraduationCap, AlertTriangle, Loader2, Lock, Info } from 'lucide-react';
+import { GraduationCap, AlertTriangle, Loader2, Lock, Info, WifiOff, FileX } from 'lucide-react';
 
 interface ErrorBoundaryProps {
   children?: ReactNode;
@@ -76,6 +76,7 @@ const AppLogic: React.FC = () => {
   
   // Student State
   const [studentIdFromUrl, setStudentIdFromUrl] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<{file: string, status: number | string} | null>(null);
   
   // Use a ref to track if we have already initialized from URL to prevent race conditions
   const hasInitializedRef = useRef(false);
@@ -92,43 +93,47 @@ const AppLogic: React.FC = () => {
         const dataFileName = urlParams.get('data') || 'student_data.json';
         
         // IMMEDIATE ACTION: If studentId is present, force Student Portal immediately
-        // This prevents the "Teacher Login" or "Role Select" flash
         if (sId) {
             console.log("Student ID found in URL, switching to Student Portal...");
             setStudentIdFromUrl(sId);
             setMode(AppMode.STUDENT_PORTAL);
 
             // 2. Attempt to fetch static data (Only for Students)
+            // CRITICAL FIX: Add cache busting timestamp to ensure fixed filenames (danny.json) load NEW data
+            const fetchUrl = `/${dataFileName}?t=${new Date().getTime()}`;
+            
             try {
-                console.log(`Fetching data file: /${dataFileName}`);
-                const res = await fetch(`/${dataFileName}?v=${new Date().getTime()}`);
+                console.log(`Fetching data file: ${fetchUrl}`);
+                const res = await fetch(fetchUrl);
+                
                 if (res.ok) {
-                    const data: ClassroomData = await res.json();
-                    
-                    const studentExists = data.students?.some(s => s.id === sId);
-                    
-                    // Logic: 
-                    // 1. If student exists in file -> Load file (Happy path)
-                    // 2. If student NOT in file, but we have NO local data (Pure student on phone) -> Load file anyway.
-                    //    This allows the UI to show "Student Not Found" (valid file, wrong ID) instead of "Data File Missing".
-                    // 3. If student NOT in file, but we HAVE local data (Teacher previewing) -> Do NOT load file. Use local data.
-                    const hasLocalData = students.length > 0;
-
-                    if (studentExists || !hasLocalData) {
-                        if (studentExists) {
-                             console.log("Student found in static file. Loading static data.");
-                        } else {
-                             console.warn("Student ID not found in file, but loading anyway for correct error handling (Student View).");
-                        }
+                    try {
+                        const data: ClassroomData = await res.json();
+                        const studentExists = data.students?.some(s => s.id === sId);
+                        
+                        // Logic: Always load file if found, to ensure student sees what's on server
                         loadStaticData(data);
-                    } else {
-                        console.warn("Student ID not found in remote file. Using local database (Teacher Preview Mode).");
+                        
+                        if (!studentExists) {
+                             console.warn("Student ID not found in the loaded file.");
+                        }
+                    } catch (jsonErr) {
+                        console.error("JSON Parse Error:", jsonErr);
+                        setFetchError({ file: dataFileName, status: "Invalid JSON Format" });
                     }
                 } else {
-                    console.warn("Data file fetch failed or not found (404).");
+                    console.warn(`Data file fetch failed: ${res.status}`);
+                    // If we are a student on a new browser (no local data), this is a fatal error
+                    if (students.length === 0) {
+                        setFetchError({ file: dataFileName, status: res.status === 404 ? "File Not Found (404)" : res.status });
+                    }
                 }
             } catch (e) {
-                console.log("Fetch error (offline/local).");
+                console.error("Network Fetch Error:", e);
+                // Only show network error if we have no local data fallback
+                if (students.length === 0) {
+                     setFetchError({ file: dataFileName, status: "Network Error" });
+                }
             }
         } else {
              // Handle teacher shortcut via hash
@@ -153,11 +158,9 @@ const AppLogic: React.FC = () => {
         const sId = urlParams.get('studentId');
 
         if (sId) {
-            // If URL has student ID, force student portal
             setMode(AppMode.STUDENT_PORTAL);
             setStudentIdFromUrl(sId);
         } else {
-            // If we go back to root, reset to Role Select
             if (mode === AppMode.STUDENT_PORTAL) {
                 setMode(AppMode.ROLE_SELECT);
             }
@@ -169,7 +172,6 @@ const AppLogic: React.FC = () => {
   }, [mode]);
 
   const navigate = (newMode: AppMode, data?: any) => {
-    // Security Check: Prevent navigating to Teacher Dashboard without Auth
     if ((newMode === AppMode.TEACHER_DASHBOARD || newMode === AppMode.TEACHER_EDITOR) && !isTeacherAuthenticated) {
         setMode(AppMode.ROLE_SELECT);
         setIsTeacherLoginVisible(true);
@@ -181,15 +183,14 @@ const AppLogic: React.FC = () => {
     if (newMode === AppMode.TEACHER_EDITOR) {
       setEditingLesson(data);
     } else if (newMode === AppMode.TEACHER_DASHBOARD) {
-        // Clear editing lesson so if we go back to create, it's clean
         setEditingLesson(undefined);
     }
     
     if (newMode === AppMode.ROLE_SELECT) {
-      window.history.pushState(null, '', window.location.pathname); // Clear params
+      window.history.pushState(null, '', window.location.pathname);
       setIsTeacherLoginVisible(false);
       setTeacherPin('');
-      setIsTeacherAuthenticated(false); // Log out
+      setIsTeacherAuthenticated(false);
     }
   };
 
@@ -198,11 +199,9 @@ const AppLogic: React.FC = () => {
     if (teacherPin === '2110') {
         setPinError('');
         setTeacherPin('');
-        
-        // FIX: Update state and mode manually to avoid async state race condition
         setIsTeacherAuthenticated(true); 
         setIsTeacherLoginVisible(false);
-        setMode(AppMode.TEACHER_DASHBOARD); // Directly set mode, bypassing navigate() check
+        setMode(AppMode.TEACHER_DASHBOARD);
     } else {
         setPinError('Incorrect Access Code');
         setTeacherPin(''); 
@@ -218,7 +217,42 @@ const AppLogic: React.FC = () => {
     );
   }
 
-  // Login Screen Component
+  // FATAL ERROR SCREEN: Fetch Failed
+  // This explicitly answers "Why does new browser open no data?"
+  if (fetchError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
+            <div className="bg-white p-8 rounded-xl shadow-lg max-w-lg w-full text-center border-t-4 border-red-500">
+                <div className="bg-red-100 text-red-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <FileX size={32} />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">Connection Failed</h2>
+                <p className="text-gray-600 mb-4">
+                    We could not load the student data file from the server.
+                </p>
+                <div className="bg-gray-100 p-4 rounded-lg text-left text-sm font-mono text-gray-700 mb-6">
+                    <p><strong>File:</strong> {fetchError.file}</p>
+                    <p><strong>Error:</strong> {fetchError.status}</p>
+                </div>
+                <div className="text-sm text-gray-500 text-left bg-blue-50 p-4 rounded-lg border border-blue-100">
+                    <strong>Troubleshooting for Teacher:</strong>
+                    <ul className="list-disc pl-5 mt-2 space-y-1">
+                        <li>Did you upload <code>{fetchError.file}</code> to the website?</li>
+                        <li>Is the filename exactly correct (case-sensitive)?</li>
+                        <li>If you just uploaded it, try waiting 1 minute.</li>
+                    </ul>
+                </div>
+                <button 
+                    onClick={() => window.location.reload()}
+                    className="mt-6 bg-teal-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-teal-700 transition w-full"
+                >
+                    Try Again
+                </button>
+            </div>
+        </div>
+      );
+  }
+
   const renderTeacherLogin = () => (
      <div className="min-h-screen bg-gradient-to-br from-teal-500 to-emerald-700 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full animate-fade-in">
@@ -266,11 +300,8 @@ const AppLogic: React.FC = () => {
   );
 
   const renderContent = () => {
-    // Global Guard: If in Teacher Mode but not authenticated, show login
-    // NOTE: Student Portal mode intentionally bypasses this guard
     if ((mode === AppMode.TEACHER_DASHBOARD || mode === AppMode.TEACHER_EDITOR) && !isTeacherAuthenticated) {
         if (isTeacherLoginVisible) return renderTeacherLogin();
-        // Fallback
         return (
              <div className="min-h-screen flex items-center justify-center">
                <button onClick={() => setMode(AppMode.ROLE_SELECT)} className="text-teal-600 underline">Return to Home</button>
@@ -291,7 +322,6 @@ const AppLogic: React.FC = () => {
               </div>
 
               <div className="space-y-6">
-                {/* Teacher Entry */}
                 <button
                   onClick={() => setIsTeacherLoginVisible(true)}
                   className="w-full flex items-center p-4 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition-all group"

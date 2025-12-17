@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useData } from '../contexts/DataContext';
 import { Lesson, AppMode, Student } from '../types';
-import { Plus, Users, Trash2, Edit, History, Link as LinkIcon, UserPlus, Check, X, Share2, BookOpen, Download, AlertCircle, HelpCircle, UploadCloud, Settings } from 'lucide-react';
+import { Plus, Users, Trash2, Edit, History, Link as LinkIcon, UserPlus, Check, X, Share2, BookOpen, Download, AlertCircle, HelpCircle, UploadCloud, Settings, Eye, RefreshCw, FileJson, CheckCircle } from 'lucide-react';
 
 interface Props {
   onNavigate: (mode: AppMode, data?: any) => void;
@@ -17,6 +17,7 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
 
   // Export Guide Modal State
   const [showExportGuide, setShowExportGuide] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
   
   // New: Custom Filename State
   const [dataFileName, setDataFileName] = useState('student_data.json');
@@ -48,6 +49,18 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
     setAssigningStudentId(null);
   };
 
+  // Generate a timestamped filename to avoid caching
+  const generateNewFilename = () => {
+    const date = new Date();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    const hour = date.getHours().toString().padStart(2, '0');
+    const minute = date.getMinutes().toString().padStart(2, '0');
+    const newName = `data_${month}${day}_${hour}${minute}.json`;
+    setDataFileName(newName);
+    setIsEditingFilename(false);
+  };
+
   // 1. Export Data Logic
   const performExport = async () => {
       const data = await exportSystemData();
@@ -69,18 +82,94 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
       let url = `${baseUrl}?studentId=${studentId}`;
       
       // Only append data param if it's NOT the default student_data.json
-      // This keeps URLs short for the standard use case
       if (dataFileName !== 'student_data.json') {
           url += `&data=${dataFileName}`;
       }
       
       navigator.clipboard.writeText(url).then(() => {
-          alert(`Link copied for ${studentName}!\n\n${url}\n\nIMPORTANT: Ensure you have uploaded the file named '${dataFileName}' to your website.`);
+          let msg = `Link copied for ${studentName}!`;
+          if (dataFileName !== 'student_data.json') {
+              msg += `\n\nTarget File: ${dataFileName}`;
+          }
+          alert(msg);
       });
   };
 
   return (
     <div className="max-w-6xl mx-auto p-6 relative">
+      
+      {/* PREVIEW MODAL - Verify Data Content */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[85vh]">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-2xl">
+                <div>
+                    <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <FileJson size={24} className="text-teal-600"/>
+                    Data File Preview
+                    </h3>
+                    <p className="text-sm text-gray-500">This is exactly what will be inside <strong>{dataFileName}</strong>.</p>
+                </div>
+                <button onClick={() => setShowPreviewModal(false)} className="text-gray-400 hover:text-gray-600"><X size={24}/></button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto">
+               <div className="space-y-6">
+                   <div>
+                       <h4 className="font-bold text-gray-700 mb-2 border-b border-gray-200 pb-1">Lessons ({lessons.length})</h4>
+                       <div className="flex flex-wrap gap-2">
+                           {lessons.map(l => (
+                               <span key={l.id} className="text-xs bg-teal-50 text-teal-700 px-2 py-1 rounded border border-teal-100">
+                                   {l.title}
+                               </span>
+                           ))}
+                       </div>
+                   </div>
+
+                   <div>
+                       <h4 className="font-bold text-gray-700 mb-2 border-b border-gray-200 pb-1">Students & Assignments ({students.length})</h4>
+                       <div className="space-y-3">
+                           {students.map(s => (
+                               <div key={s.id} className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                                   <div className="flex justify-between items-center mb-2">
+                                       <span className="font-bold text-gray-800">{s.name}</span>
+                                       <span className="text-xs text-gray-500 font-mono">{s.id}</span>
+                                   </div>
+                                   {s.assignedLessonIds.length > 0 ? (
+                                       <ul className="list-disc list-inside text-sm text-gray-600">
+                                           {s.assignedLessonIds.map(lid => {
+                                               const lessonTitle = lessons.find(l => l.id === lid)?.title || "Unknown Lesson";
+                                               return <li key={lid}>{lessonTitle}</li>;
+                                           })}
+                                       </ul>
+                                   ) : (
+                                       <p className="text-sm text-red-400 italic">No lessons assigned</p>
+                                   )}
+                               </div>
+                           ))}
+                       </div>
+                   </div>
+               </div>
+            </div>
+
+            <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl flex justify-end gap-3">
+                <button 
+                    onClick={() => setShowPreviewModal(false)}
+                    className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg font-medium"
+                >
+                    Close
+                </button>
+                <button 
+                    onClick={() => { setShowPreviewModal(false); setShowExportGuide(true); }}
+                    className="px-4 py-2 bg-teal-600 text-white rounded-lg font-bold hover:bg-teal-700"
+                >
+                    Looks Good, Export Now
+                </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* EXPORT INSTRUCTION MODAL */}
       {showExportGuide && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in">
@@ -106,7 +195,12 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
               </div>
               <div className="flex gap-3">
                  <div className="bg-teal-100 text-teal-800 w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0">3</div>
-                 <p className="text-sm pt-1">Upload this file to your website's <code>public</code> folder (Github).</p>
+                 <div className="flex-1">
+                    <p className="text-sm pt-1">Upload this file to your website's <code>public</code> folder.</p>
+                    <div className="mt-2 bg-blue-50 border border-blue-200 p-2 rounded text-xs text-blue-800">
+                        <strong>Link Note:</strong> Links using <code>{dataFileName}</code> will now automatically load the newest data (even on old browsers).
+                    </div>
+                 </div>
               </div>
             </div>
 
@@ -151,46 +245,86 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
         </div>
         
         {/* Publication Area */}
-        <div className="mt-6 bg-orange-50 border border-orange-200 rounded-xl p-4 flex flex-col gap-4">
+        <div className="mt-6 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-xl p-5 flex flex-col gap-4">
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                 <div className="flex items-start gap-3">
                     <div className="bg-orange-100 p-2 rounded-full text-orange-600 mt-1">
-                        <UploadCloud size={20}/>
+                        <UploadCloud size={24}/>
                     </div>
                     <div>
-                        <h3 className="font-bold text-orange-800">Publish Changes</h3>
-                        <p className="text-sm text-orange-700">Any changes are only visible after you update the website data.</p>
+                        <h3 className="font-bold text-orange-900 text-lg">Publish Your Changes</h3>
+                        <p className="text-sm text-orange-800/80">
+                            Updates are not live until you download and upload the data file.
+                        </p>
                     </div>
                 </div>
-                <button 
-                    onClick={() => setShowExportGuide(true)}
-                    className="flex items-center gap-2 bg-white text-orange-700 border border-orange-300 px-4 py-2 rounded-lg font-bold hover:bg-orange-100 shadow-sm shrink-0"
-                >
-                    <Download size={18}/> Export Website Data
-                </button>
+                
+                <div className="flex gap-2 shrink-0">
+                    <button 
+                        onClick={() => setShowPreviewModal(true)}
+                        className="flex items-center gap-2 bg-white text-gray-700 border border-gray-300 px-4 py-2.5 rounded-lg font-bold hover:bg-gray-50 shadow-sm"
+                    >
+                        <Eye size={18}/> Verify Data
+                    </button>
+                    <button 
+                        onClick={() => setShowExportGuide(true)}
+                        className="flex items-center gap-2 bg-orange-600 text-white border border-orange-600 px-5 py-2.5 rounded-lg font-bold hover:bg-orange-700 shadow-md"
+                    >
+                        <Download size={18}/> Export Data
+                    </button>
+                </div>
             </div>
 
             {/* Advanced File Settings */}
-            <div className="border-t border-orange-200 pt-3 flex items-center gap-2 text-sm text-orange-800">
-                <Settings size={14} />
-                <span>Current Data File:</span>
-                {isEditingFilename ? (
+            <div className="border-t border-orange-200/50 pt-3">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 text-sm text-orange-900 w-full">
                     <div className="flex items-center gap-2">
-                        <input 
-                            type="text" 
-                            value={dataFileName} 
-                            onChange={(e) => setDataFileName(e.target.value)}
-                            className="px-2 py-1 rounded border border-orange-300 text-gray-700 focus:outline-none focus:border-orange-500"
-                        />
-                        <button onClick={() => setIsEditingFilename(false)} className="text-teal-600 hover:underline">Done</button>
+                        <Settings size={16} />
+                        <span className="font-medium">Export Filename:</span>
                     </div>
-                ) : (
-                    <div className="flex items-center gap-2">
-                        <code className="bg-white/50 px-2 py-0.5 rounded font-mono font-bold">{dataFileName}</code>
-                        <button onClick={() => setIsEditingFilename(true)} className="text-orange-600 hover:text-orange-900 underline text-xs">Change Filename</button>
+
+                    {isEditingFilename ? (
+                        <div className="flex items-center gap-2 bg-white p-1 rounded border border-orange-300 w-full sm:w-auto">
+                            <input 
+                                type="text" 
+                                value={dataFileName} 
+                                onChange={(e) => setDataFileName(e.target.value)}
+                                className="px-2 py-1 rounded text-gray-700 focus:outline-none w-full sm:w-64"
+                                placeholder="e.g. danny.json"
+                            />
+                            <button onClick={() => setIsEditingFilename(false)} className="bg-teal-100 text-teal-700 px-2 py-1 rounded text-xs font-bold hover:bg-teal-200 whitespace-nowrap">OK</button>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2">
+                            <code className="bg-white/70 px-3 py-1 rounded-md font-mono font-bold text-orange-800 border border-orange-200 shadow-sm">{dataFileName}</code>
+                            <button onClick={() => setIsEditingFilename(true)} className="text-orange-600 hover:text-orange-900 underline text-xs">Rename</button>
+                        </div>
+                    )}
+                    
+                    <span className="hidden sm:inline text-gray-400">|</span>
+                    
+                    <div className="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                         {/* Quick name suggestions */}
+                         <button 
+                            onClick={() => { setDataFileName('danny.json'); setIsEditingFilename(false); }}
+                            className="text-xs bg-orange-100 hover:bg-orange-200 text-orange-800 px-2 py-1 rounded transition"
+                        >
+                           danny.json
+                        </button>
+                        <button 
+                            onClick={() => { setDataFileName('student_data.json'); setIsEditingFilename(false); }}
+                            className="text-xs bg-orange-100 hover:bg-orange-200 text-orange-800 px-2 py-1 rounded transition"
+                        >
+                           Reset
+                        </button>
                     </div>
+                </div>
+                
+                {dataFileName !== 'student_data.json' && (
+                    <p className="mt-2 text-xs text-teal-600 font-medium flex items-center gap-1">
+                        <CheckCircle size={12}/> Custom filename active. Student links will use <code>&data={dataFileName}</code>.
+                    </p>
                 )}
-                <span className="text-xs text-orange-600/70 ml-2 hidden md:inline">(Only change this if you are managing multiple class files)</span>
             </div>
         </div>
       </header>
