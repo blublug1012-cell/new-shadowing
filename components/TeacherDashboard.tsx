@@ -8,7 +8,7 @@ interface Props {
 }
 
 const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
-  const { lessons, students, addStudent, assignLesson, deleteLesson, getLessonById, exportSystemData } = useData();
+  const { lessons, students, addStudent, deleteStudent, assignLesson, deleteLesson, getLessonById, exportSystemData } = useData();
   const [activeTab, setActiveTab] = useState<'lessons' | 'students'>('lessons');
   const [newStudentName, setNewStudentName] = useState('');
   
@@ -34,6 +34,12 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
     if (!newStudentName.trim()) return;
     await addStudent(newStudentName);
     setNewStudentName('');
+  };
+
+  const handleDeleteStudent = async (studentId: string, studentName: string) => {
+    if (window.confirm(`Are you sure you want to delete student "${studentName}"? This cannot be undone.`)) {
+        await deleteStudent(studentId);
+    }
   };
 
   const handleAssign = async (studentId: string, lessonId: string) => {
@@ -288,12 +294,21 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
                             <span className="text-xs text-gray-500">{student.assignedLessonIds.length} Assignments</span>
                         </div>
                      </div>
-                     <button
-                        onClick={() => copyStudentLink(student.id, student.name)}
-                        className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 shadow-sm hover:shadow-md transition-all"
-                     >
-                        <LinkIcon size={16}/> Copy Link
-                     </button>
+                     <div className="flex items-center gap-2">
+                         <button
+                            onClick={() => copyStudentLink(student.id, student.name)}
+                            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 shadow-sm hover:shadow-md transition-all"
+                         >
+                            <LinkIcon size={16}/> Copy Link
+                         </button>
+                         <button
+                            onClick={() => handleDeleteStudent(student.id, student.name)}
+                            className="flex items-center gap-2 bg-white text-red-400 border border-gray-200 px-3 py-2 rounded-lg text-sm hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all"
+                            title="Delete Student"
+                         >
+                            <Trash2 size={16}/>
+                         </button>
+                     </div>
                   </div>
                   
                   <div className="p-4">

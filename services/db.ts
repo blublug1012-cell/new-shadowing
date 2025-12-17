@@ -85,6 +85,15 @@ class DBService {
     });
   }
 
+  async deleteStudent(id: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const store = this.getStore(STORE_STUDENTS, 'readwrite');
+      const request = store.delete(id);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
   // Migration utility to move data from localStorage to IndexedDB if it exists
   async migrateFromLocalStorage(key: string): Promise<boolean> {
     const raw = localStorage.getItem(key);

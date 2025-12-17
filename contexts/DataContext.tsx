@@ -12,6 +12,7 @@ interface DataContextType {
   updateLesson: (lesson: Lesson) => Promise<void>;
   deleteLesson: (id: string) => Promise<void>;
   addStudent: (name: string) => Promise<void>;
+  deleteStudent: (id: string) => Promise<void>;
   assignLesson: (studentId: string, lessonId: string) => Promise<void>;
   getStudentById: (id: string) => Student | undefined;
   getLessonById: (id: string) => Lesson | undefined;
@@ -120,6 +121,16 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const deleteStudent = async (id: string) => {
+    if (isReadOnly) return;
+    try {
+      await dbService.deleteStudent(id);
+      setStudents(prev => prev.filter(s => s.id !== id));
+    } catch (e) {
+      console.error("Failed to delete student", e);
+    }
+  };
+
   const assignLesson = async (studentId: string, lessonId: string) => {
     if (isReadOnly) return;
     const student = students.find(s => s.id === studentId);
@@ -156,6 +167,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       updateLesson,
       deleteLesson,
       addStudent,
+      deleteStudent,
       assignLesson,
       getStudentById,
       getLessonById

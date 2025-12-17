@@ -104,8 +104,17 @@ const AppLogic: React.FC = () => {
                 const res = await fetch(`/${dataFileName}?v=${new Date().getTime()}`);
                 if (res.ok) {
                     const data: ClassroomData = await res.json();
-                    console.log("Data file loaded successfully.");
-                    loadStaticData(data);
+                    
+                    // SMART CHECK: Only load static data if the student exists in it.
+                    // Otherwise, assume we are testing a local student (Teacher Preview) and keep using local DB.
+                    const studentExists = data.students?.some(s => s.id === sId);
+                    
+                    if (studentExists) {
+                        console.log("Student found in static file. Loading static data.");
+                        loadStaticData(data);
+                    } else {
+                        console.warn("Student ID not found in remote file. Using local database (Teacher Preview Mode).");
+                    }
                 } else {
                     console.warn("Data file fetch failed or not found (404).");
                 }
