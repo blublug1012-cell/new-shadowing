@@ -16,7 +16,8 @@ interface DataContextType {
   assignLesson: (studentId: string, lessonId: string) => Promise<void>;
   getStudentById: (id: string) => Student | undefined;
   getLessonById: (id: string) => Lesson | undefined;
-  exportSystemData: () => Promise<ClassroomData>; // For Teacher Export
+  exportSystemData: () => Promise<ClassroomData>; // For Teacher Export (All Data)
+  exportStudentData: (studentId: string) => Promise<ClassroomData>; // For Teacher Export (Single Student)
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -67,8 +68,6 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const exportSystemData = async (): Promise<ClassroomData> => {
     // CRITICAL FIX: Fetch directly from IndexedDB to ensure we export exactly what is saved.
-    // Relying on React state variables inside this closure might yield stale data
-    // if the user clicks export immediately after an update.
     const dbLessons = await dbService.getAllLessons();
     const dbStudents = await dbService.getAllStudents();
 
@@ -76,6 +75,24 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         generatedAt: Date.now(),
         students: dbStudents,
         lessons: dbLessons
+    };
+  };
+
+  // NEW: Export only one student and their assigned lessons
+  const exportStudentData = async (studentId: string): Promise<ClassroomData> => {
+    const dbLessons = await dbService.getAllLessons();
+    const dbStudents = await dbService.getAllStudents();
+
+    const student = dbStudents.find(s => s.id === studentId);
+    if (!student) throw new Error(`Student with ID ${studentId} not found`);
+
+    // Filter lessons to only those assigned to this student
+    const relevantLessons = dbLessons.filter(l => student.assignedLessonIds.includes(l.id));
+
+    return {
+        generatedAt: Date.now(),
+        students: [student],
+        lessons: relevantLessons
     };
   };
 
@@ -168,6 +185,7 @@ export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       isReadOnly,
       loadStaticData,
       exportSystemData,
+      exportStudentData,
       addLesson,
       updateLesson,
       deleteLesson,
