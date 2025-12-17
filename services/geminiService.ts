@@ -69,9 +69,9 @@ function writeString(view: DataView, offset: number, string: string) {
 }
 
 const getAIClient = () => {
-  const apiKey = import.meta.env.VITE_API_KEY;
-  if (!apiKey || apiKey === "undefined" || apiKey === "") {
-    throw new Error("API Key Error: 'VITE_API_KEY' is missing.");
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("API Key Error: 'process.env.API_KEY' is missing.");
   }
   return new GoogleGenAI({ apiKey: apiKey });
 };

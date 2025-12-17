@@ -229,18 +229,24 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
                 <div className="flex flex-wrap gap-2 mb-3 items-end">
                   {sentence.words.map((word, wIdx) => {
                     const hasJyutping = word.jyutping && word.jyutping.length > 0;
+                    const listId = `jyutping-options-${sentence.id}-${wIdx}`;
                     return (
                       <div key={wIdx} className="flex flex-col items-center">
                         {hasJyutping ? (
-                          <select
-                            value={word.selectedJyutping}
-                            onChange={(e) => updateWordJyutping(sentence.id, wIdx, e.target.value)}
-                            className="text-xs text-teal-600 font-medium bg-transparent border-none outline-none cursor-pointer hover:bg-teal-50 rounded mb-1"
-                          >
-                            {word.jyutping.map(jp => (
-                              <option key={jp} value={jp}>{jp}</option>
-                            ))}
-                          </select>
+                          <>
+                            <input
+                              type="text"
+                              value={word.selectedJyutping}
+                              onChange={(e) => updateWordJyutping(sentence.id, wIdx, e.target.value)}
+                              list={listId}
+                              className="text-xs text-teal-600 font-medium bg-transparent border-b border-transparent hover:border-teal-300 focus:border-teal-500 outline-none text-center w-[4.5rem] mb-1 p-0 transition-colors"
+                            />
+                            <datalist id={listId}>
+                              {word.jyutping.map(jp => (
+                                <option key={jp} value={jp} />
+                              ))}
+                            </datalist>
+                          </>
                         ) : (
                           <div className="h-5"></div> /* Placeholder for alignment */
                         )}
