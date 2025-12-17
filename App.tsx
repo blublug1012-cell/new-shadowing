@@ -97,6 +97,21 @@ const AppLogic: React.FC = () => {
             console.log("Student ID found in URL, switching to Student Portal...");
             setStudentIdFromUrl(sId);
             setMode(AppMode.STUDENT_PORTAL);
+
+            // 2. Attempt to fetch static data (Only for Students)
+            try {
+                console.log(`Fetching data file: /${dataFileName}`);
+                const res = await fetch(`/${dataFileName}?v=${new Date().getTime()}`);
+                if (res.ok) {
+                    const data: ClassroomData = await res.json();
+                    console.log("Data file loaded successfully.");
+                    loadStaticData(data);
+                } else {
+                    console.warn("Data file fetch failed or not found (404).");
+                }
+            } catch (e) {
+                console.log("Fetch error (offline/local).");
+            }
         } else {
              // Handle teacher shortcut via hash
              if (window.location.hash === '#/teacher') {
@@ -105,22 +120,6 @@ const AppLogic: React.FC = () => {
         }
         
         hasInitializedRef.current = true;
-
-        // 2. Attempt to fetch static data (Deployed Mode)
-        // We do this regardless of mode, just in case
-        try {
-            console.log(`Fetching data file: /${dataFileName}`);
-            const res = await fetch(`/${dataFileName}?v=${new Date().getTime()}`);
-            if (res.ok) {
-                const data: ClassroomData = await res.json();
-                console.log("Data file loaded successfully.");
-                loadStaticData(data);
-            } else {
-                console.warn("Data file fetch failed or not found (404). Using local DB.");
-            }
-        } catch (e) {
-            console.log("Fetch error (offline/local). Using local DB data.");
-        }
     };
     
     // Only run if DataContext has finished its initial local DB check
