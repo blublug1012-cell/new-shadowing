@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import { generateCantoneseLesson } from '../services/geminiService';
 import { Lesson, Sentence, AppMode } from '../types';
 import AudioRecorder from './AudioRecorder';
-import { ArrowLeft, Wand2, Save, Loader2, Image as ImageIcon, Youtube, MessageSquareText, Mic } from 'lucide-react';
+import { ArrowLeft, Wand2, Save, Loader2, Image as ImageIcon, Youtube, MessageSquareText, Mic, Printer } from 'lucide-react';
 
 interface Props {
   onNavigate: (mode: AppMode) => void;
@@ -29,6 +30,7 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
   // UI State
   const [isProcessing, setIsProcessing] = useState(false);
   const [step, setStep] = useState<1 | 2>(editLesson ? 2 : 1);
+  const [isPrinting, setIsPrinting] = useState(false);
   
   const handleAIProcess = async () => {
     if (!inputText.trim()) return;
@@ -59,7 +61,6 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
     }
   };
 
-  // Extract video ID and convert to embed URL
   const handleYoutubeChange = (url: string) => {
     setYoutubeInput(url);
     if (!url) {
@@ -88,6 +89,14 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
     }));
   };
 
+  const handlePrint = () => {
+    setIsPrinting(true);
+    setTimeout(() => {
+        window.print();
+        setIsPrinting(false);
+    }, 500);
+  };
+
   const saveLesson = () => {
     if (!title.trim()) {
       alert("Please enter a lesson title.");
@@ -113,33 +122,65 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
 
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white min-h-screen">
-      <div className="flex items-center gap-4 mb-6">
-        <button onClick={() => onNavigate(AppMode.TEACHER_DASHBOARD)} className="text-gray-500 hover:text-gray-800">
+      {/* HIDDEN PRINT AREA */}
+      <div id="printable-editor-area" className="hidden print:block fixed inset-0 bg-white z-[9999] p-8 overflow-y-auto">
+          <h1 className="text-3xl font-bold mb-1">{title || 'Untitled Lesson'}</h1>
+          <p className="text-gray-400 text-sm mb-8">YuetYu Tutor Handout</p>
+          <div className="space-y-10">
+              {sentences.map((sentence, sIdx) => (
+                  <div key={sIdx} className="border-b border-gray-100 pb-8 break-inside-avoid">
+                      <div className="flex flex-wrap gap-x-4 gap-y-6 mb-4 items-end">
+                          {sentence.words.map((word, wIdx) => (
+                              <div key={wIdx} className="flex flex-col items-center">
+                                  <span className="text-sm font-medium text-teal-600 mb-1">{word.selectedJyutping}</span>
+                                  <span className="text-2xl font-serif">{word.char}</span>
+                              </div>
+                          ))}
+                      </div>
+                      <p className="text-lg italic text-gray-700 bg-gray-50 p-3 rounded-lg">{sentence.english}</p>
+                      {sentence.explanationText && (
+                          <div className="mt-4 p-4 bg-orange-50 border-l-4 border-orange-200 text-sm text-gray-700">
+                              <strong>Notes:</strong> {sentence.explanationText}
+                          </div>
+                      )}
+                  </div>
+              ))}
+          </div>
+      </div>
+      <style>{`
+        @media print {
+            body > *:not(#printable-editor-area) { display: none !important; }
+            #printable-editor-area { display: block !important; position: static !important; }
+        }
+      `}</style>
+
+      <div className="flex items-center gap-4 mb-6 print:hidden">
+        <button onClick={() => onNavigate(AppMode.TEACHER_DASHBOARD)} className="text-gray-500 hover:text-gray-800 p-2 hover:bg-gray-100 rounded-full transition">
           <ArrowLeft size={24} />
         </button>
         <h1 className="text-2xl font-bold text-gray-800">{editLesson ? 'Edit Lesson' : 'Create New Lesson'}</h1>
       </div>
 
-      <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-1">Lesson Title</label>
+      <div className="mb-6 print:hidden">
+        <label className="block text-sm font-bold text-gray-500 uppercase tracking-wider mb-1">Lesson Title</label>
         <input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none"
+          className="w-full p-3 text-lg font-bold border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all"
           placeholder="e.g., Ordering Dim Sum"
         />
       </div>
 
       {step === 1 && (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-6 animate-fade-in print:hidden">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Cantonese Text Input</label>
-            <p className="text-xs text-gray-500 mb-2">The AI will analyze this text to generate Jyutping and translations. Audio recording happens in the next step.</p>
+            <label className="block text-sm font-bold text-gray-500 uppercase tracking-wider mb-1">Cantonese Text Input</label>
+            <p className="text-xs text-gray-400 mb-3">The AI will analyze this text to generate Jyutping and translations.</p>
             <textarea
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              className="w-full h-40 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none resize-none"
+              className="w-full h-48 p-4 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none resize-none leading-relaxed"
               placeholder="Paste Cantonese text here (e.g., 'Hello! 大家好，今日好开心。')..."
             />
           </div>
@@ -147,41 +188,41 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
           <button
             onClick={handleAIProcess}
             disabled={isProcessing || !inputText.trim()}
-            className="w-full flex justify-center items-center gap-2 bg-teal-600 text-white py-3 rounded-lg hover:bg-teal-700 transition disabled:opacity-50"
+            className="w-full flex justify-center items-center gap-2 bg-teal-600 text-white py-4 rounded-xl hover:bg-teal-700 transition shadow-lg disabled:opacity-50 font-bold text-lg"
           >
             {isProcessing ? <Loader2 className="animate-spin" /> : <Wand2 />}
-            Generate Jyutping & Translation
+            Generate Content with AI
           </button>
         </div>
       )}
 
       {step === 2 && (
-        <div className="space-y-8 animate-fade-in">
+        <div className="space-y-8 animate-fade-in print:hidden">
           {/* Media Section */}
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <h3 className="text-sm font-bold text-gray-700 mb-3">Lesson Media (Optional)</h3>
+          <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100">
+            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Lesson Media (Optional)</h3>
             
             <div className="flex gap-4 mb-4">
                <button 
                  onClick={() => { setMediaType('image'); setMediaUrl(''); setYoutubeInput(''); }}
-                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${mediaType === 'image' ? 'bg-teal-600 text-white shadow' : 'bg-white text-gray-600 border'}`}
+                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${mediaType === 'image' ? 'bg-teal-600 text-white shadow-md' : 'bg-white text-gray-500 border border-gray-200'}`}
                >
-                 <ImageIcon size={16} /> Upload Image
+                 <ImageIcon size={16} /> Image
                </button>
                <button 
                  onClick={() => { setMediaType('youtube'); setMediaUrl(''); }}
-                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${mediaType === 'youtube' ? 'bg-red-600 text-white shadow' : 'bg-white text-gray-600 border'}`}
+                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${mediaType === 'youtube' ? 'bg-red-600 text-white shadow-md' : 'bg-white text-gray-500 border border-gray-200'}`}
                >
-                 <Youtube size={16} /> YouTube Video
+                 <Youtube size={16} /> YouTube
                </button>
             </div>
 
-            <div className="flex flex-col md:flex-row gap-4 items-start">
+            <div className="flex flex-col md:flex-row gap-6 items-start">
               <div className="flex-1 w-full">
                 {mediaType === 'image' ? (
                   <div className="space-y-2">
-                    <input type="file" accept="image/*" onChange={handleImageUpload} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100"/>
-                    <p className="text-xs text-gray-400">Max size: 2MB. Larger images will bloat the data file.</p>
+                    <input type="file" accept="image/*" onChange={handleImageUpload} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 cursor-pointer"/>
+                    <p className="text-[10px] text-gray-400 font-medium">Max size: 2MB to keep data files efficient.</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -190,15 +231,14 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
                       value={youtubeInput}
                       onChange={(e) => handleYoutubeChange(e.target.value)}
                       placeholder="Paste YouTube Link (e.g. https://www.youtube.com/watch?v=...)"
-                      className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 outline-none"
+                      className="w-full p-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-red-500 outline-none"
                     />
-                    <p className="text-xs text-gray-400">Paste the full link. We will handle the embedding.</p>
                   </div>
                 )}
               </div>
 
               {mediaUrl && (
-                <div className="relative h-32 w-48 bg-black rounded-lg overflow-hidden shadow-md shrink-0 border border-gray-200">
+                <div className="relative h-32 w-48 bg-black rounded-xl overflow-hidden shadow-md shrink-0 border border-gray-200">
                    {mediaType === 'youtube' ? (
                       <iframe src={mediaUrl} className="w-full h-full" title="Preview" frameBorder="0" allowFullScreen></iframe>
                    ) : (
@@ -217,16 +257,16 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
 
           {/* Sentences Editor */}
           <div className="space-y-6">
-            <div className="flex justify-between items-center">
-               <h2 className="text-xl font-bold text-gray-800">Edit & Record</h2>
-               <p className="text-sm text-gray-500">Record your own voice for students to follow.</p>
+            <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+               <h2 className="text-xl font-black text-gray-800">Content & Recordings</h2>
+               <p className="text-xs text-gray-400 font-bold uppercase">Step 2 of 2</p>
             </div>
 
             {sentences.map((sentence, sIdx) => (
-              <div key={sentence.id} className="border border-gray-200 rounded-xl p-4 shadow-sm bg-white hover:border-teal-300 transition-colors">
+              <div key={sentence.id} className="border border-gray-100 rounded-2xl p-6 shadow-sm bg-white hover:border-teal-200 transition-all">
                 
                 {/* Character & Jyutping Row */}
-                <div className="flex flex-wrap gap-2 mb-3 items-end">
+                <div className="flex flex-wrap gap-x-4 gap-y-6 mb-6 items-end">
                   {sentence.words.map((word, wIdx) => {
                     const hasJyutping = word.jyutping && word.jyutping.length > 0;
                     const listId = `jyutping-options-${sentence.id}-${wIdx}`;
@@ -239,7 +279,7 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
                               value={word.selectedJyutping}
                               onChange={(e) => updateWordJyutping(sentence.id, wIdx, e.target.value)}
                               list={listId}
-                              className="text-xs text-teal-600 font-medium bg-transparent border-b border-transparent hover:border-teal-300 focus:border-teal-500 outline-none text-center w-[4.5rem] mb-1 p-0 transition-colors"
+                              className="text-xs text-teal-600 font-bold bg-transparent border-b border-transparent hover:border-teal-300 focus:border-teal-500 outline-none text-center w-[4.5rem] mb-1 p-0 transition-colors"
                             />
                             <datalist id={listId}>
                               {word.jyutping.map(jp => (
@@ -248,86 +288,85 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
                             </datalist>
                           </>
                         ) : (
-                          <div className="h-5"></div> /* Placeholder for alignment */
+                          <div className="h-5"></div>
                         )}
-                        <span className="text-xl font-serif text-gray-800">{word.char}</span>
+                        <span className="text-2xl font-serif text-gray-800 leading-none">{word.char}</span>
                       </div>
                     );
                   })}
                 </div>
 
                 {/* Translation Input */}
-                <div className="mb-3">
-                   <label className="text-xs text-gray-400 uppercase font-bold">English Translation</label>
+                <div className="mb-4">
+                   <label className="text-[10px] text-gray-400 uppercase font-black tracking-widest">Translation</label>
                    <input
                       type="text"
                       value={sentence.english}
                       onChange={(e) => updateSentence(sentence.id, { english: e.target.value })}
-                      className="w-full text-sm text-gray-600 border-b border-gray-200 focus:border-teal-500 outline-none pb-1"
+                      className="w-full text-base text-gray-700 border-b border-gray-100 focus:border-teal-400 outline-none pb-1 font-medium italic"
                       placeholder="English translation"
                     />
                 </div>
 
-                {/* Main Audio Recording (Manual Only) */}
-                <div className="bg-gray-50 p-3 rounded-lg mb-3">
-                    <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-1">
-                            <Mic size={14}/> Reading Recording
-                        </span>
-                        
-                        {/* Audio Controls */}
-                        <div className="flex items-center gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Main Audio Recording */}
+                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1">
+                                <Mic size={14} className="text-red-400"/> Primary Audio
+                            </span>
                             <AudioRecorder 
                                 existingAudio={sentence.audioBase64} 
                                 onSave={(base64) => updateSentence(sentence.id, { audioBase64: base64 })} 
                             />
                         </div>
+                        <p className="text-[10px] text-gray-400">Main reading for shadowing.</p>
                     </div>
-                    <p className="text-[10px] text-gray-400 mt-1">
-                        Click the microphone to record your own pronunciation.
-                    </p>
-                </div>
 
-                {/* Explanation Section */}
-                <div className="bg-orange-50 p-3 rounded-lg border border-orange-100">
-                    <div className="flex items-center gap-2 mb-2">
-                        <MessageSquareText size={16} className="text-orange-600"/>
-                        <span className="text-xs font-bold text-orange-800 uppercase">Vocabulary & Explanation (Optional)</span>
-                    </div>
-                    
-                    <textarea
-                        value={sentence.explanationText || ''}
-                        onChange={(e) => updateSentence(sentence.id, { explanationText: e.target.value })}
-                        className="w-full text-sm p-2 bg-white border border-orange-200 rounded text-gray-700 outline-none focus:ring-1 focus:ring-orange-400 mb-2 resize-y min-h-[60px]"
-                        placeholder="Explain difficult words or grammar here (press Enter for new lines)..."
-                    />
-                    
-                    <div className="flex items-center justify-between border-t border-orange-100 pt-2">
-                         <span className="text-xs text-orange-600">Explanation Audio</span>
-                         <AudioRecorder 
-                            existingAudio={sentence.explanationAudio} 
-                            onSave={(base64) => updateSentence(sentence.id, { explanationAudio: base64 })} 
-                         />
+                    {/* Explanation Section */}
+                    <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] font-black text-orange-400 uppercase tracking-widest flex items-center gap-1">
+                                <MessageSquareText size={14}/> Teacher Notes
+                            </span>
+                            <AudioRecorder 
+                                existingAudio={sentence.explanationAudio} 
+                                onSave={(base64) => updateSentence(sentence.id, { explanationAudio: base64 })} 
+                            />
+                        </div>
+                        <textarea
+                            value={sentence.explanationText || ''}
+                            onChange={(e) => updateSentence(sentence.id, { explanationText: e.target.value })}
+                            className="w-full text-xs p-2 bg-white border border-orange-100 rounded-lg text-gray-700 outline-none focus:ring-2 focus:ring-orange-200 resize-y min-h-[40px]"
+                            placeholder="Vocabulary or grammar notes..."
+                        />
                     </div>
                 </div>
-
               </div>
             ))}
           </div>
 
-          <div className="sticky bottom-4 bg-white p-4 shadow-lg rounded-xl border border-gray-200 flex justify-end gap-4 z-50">
+          <div className="sticky bottom-6 bg-white/90 backdrop-blur-md p-4 shadow-2xl rounded-2xl border border-gray-100 flex justify-between items-center z-50">
              <button
                onClick={() => setStep(1)}
-               className="px-6 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium"
+               className="px-6 py-3 text-gray-500 hover:bg-gray-100 rounded-xl font-bold transition-all"
              >
-               Back
+               Change Text
              </button>
-             <button
-               onClick={saveLesson}
-               className="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium flex items-center gap-2"
-             >
-               <Save size={18} /> Save Lesson
-             </button>
+             <div className="flex gap-3">
+                <button
+                    onClick={handlePrint}
+                    className="px-6 py-3 bg-white border-2 border-teal-600 text-teal-600 rounded-xl hover:bg-teal-50 font-bold flex items-center gap-2 transition-all shadow-sm"
+                >
+                    <Printer size={18} /> Print Handout
+                </button>
+                <button
+                onClick={saveLesson}
+                className="px-8 py-3 bg-teal-600 text-white rounded-xl hover:bg-teal-700 font-black flex items-center gap-2 transition-all shadow-xl hover:scale-105 active:scale-95"
+                >
+                <Save size={18} /> Save Lesson
+                </button>
+             </div>
           </div>
         </div>
       )}

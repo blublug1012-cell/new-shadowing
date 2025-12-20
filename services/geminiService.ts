@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type, HarmCategory, HarmBlockThreshold, Modality } from "@google/genai";
 import { Sentence, Word } from "../types";
 
@@ -68,17 +69,19 @@ function writeString(view: DataView, offset: number, string: string) {
   }
 }
 
+// Initializing the Google GenAI client correctly with a named parameter.
+// Uses process.env.API_KEY directly as required.
 const getAIClient = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
+  if (!process.env.API_KEY) {
     throw new Error("API Key Error: 'process.env.API_KEY' is missing.");
   }
-  return new GoogleGenAI({ apiKey: apiKey });
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
 export const generateCantoneseLesson = async (text: string): Promise<Sentence[]> => {
   const ai = getAIClient();
-  const model = "gemini-2.5-flash";
+  // Selected gemini-3-pro-preview for complex reasoning task (Cantonese linguistic analysis)
+  const model = "gemini-3-pro-preview";
   
   const prompt = `
     Analyze the following Cantonese text, which may contain mixed English and punctuation.
@@ -135,14 +138,9 @@ export const generateCantoneseLesson = async (text: string): Promise<Sentence[]>
       }
     });
 
+    // Extracting text output using the .text property (not a method).
     if (response.text) {
-      let cleanText = response.text.trim();
-      if (cleanText.startsWith('```json')) {
-        cleanText = cleanText.replace(/^```json/, '').replace(/```$/, '');
-      } else if (cleanText.startsWith('```')) {
-        cleanText = cleanText.replace(/^```/, '').replace(/```$/, '');
-      }
-
+      const cleanText = response.text.trim();
       const data = JSON.parse(cleanText);
       return data.map((s: any, idx: number) => ({
         ...s,
@@ -163,42 +161,33 @@ export const generateCantoneseSpeech = async (text: string): Promise<string> => 
   }
 
   const ai = getAIClient();
+  // Using the dedicated text-to-speech model
   const model = "gemini-2.5-flash-preview-tts";
 
   try {
     console.log("[TTS Request] Generating speech for:", text.substring(0, 20) + "...");
 
-    // Ensure contents is an array of parts, as expected by the API
     const response = await ai.models.generateContent({
       model: model,
       contents: [{ parts: [{ text: text }] }],
       config: {
         responseModalities: [Modality.AUDIO], 
-        // Add safety settings to prevent false positives for 'OTHER' blocks
-        safetySettings: [
-          { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-          { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-          { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-          { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        ],
         speechConfig: {
             voiceConfig: {
-              // Switch to Puck to see if it's more stable for this locale/request
               prebuiltVoiceConfig: { voiceName: 'Puck' },
             },
         },
       },
     });
 
-    // Check for inline data (audio)
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    // Search through all parts to find the audio (inlineData) part.
+    const audioPart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+    const base64Audio = audioPart?.inlineData?.data;
     
     if (base64Audio) {
-      // Convert to WAV so browser can play it
       return addWavHeader(base64Audio);
     }
 
-    // Diagnostic logging for "OTHER" errors
     const candidate = response.candidates?.[0];
     const finishReason = candidate?.finishReason;
     const textPart = candidate?.content?.parts?.[0]?.text;
@@ -217,7 +206,6 @@ export const generateCantoneseSpeech = async (text: string): Promise<string> => 
 
   } catch (error: any) {
     console.error("TTS Error:", error);
-    // Provide a more user-friendly error if possible
     throw new Error(error.message || "Failed to generate speech");
   }
 };
