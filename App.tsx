@@ -17,11 +17,12 @@ interface ErrorBoundaryState {
 }
 
 // ErrorBoundary must inherit from React.Component to have access to this.props and this.state correctly in TS
+// Fix: Added a constructor that calls super(props) to ensure 'props' is recognized on the instance.
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { hasError: false, error: null };
-
-  // Note: constructor is removed to rely on class property initialization for state, 
-  // avoiding potential issues with implicit props assignment in some TS environments.
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };

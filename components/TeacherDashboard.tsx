@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import { Lesson, AppMode, Student } from '../types';
-import { Plus, Users, Trash2, Edit, History, Link as LinkIcon, UserPlus, X, BookOpen, Download, UploadCloud, Eye, RefreshCw, FileJson, Printer, CheckCircle, GraduationCap } from 'lucide-react';
+import { Plus, Users, Trash2, Edit, History, Link as LinkIcon, UserPlus, X, Download, UploadCloud, Eye, RefreshCw, FileJson, Printer, CheckCircle, Lightbulb } from 'lucide-react';
 
 interface Props {
   onNavigate: (mode: AppMode, data?: any) => void;
@@ -16,6 +16,7 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
   const [showExportGuide, setShowExportGuide] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [printingLesson, setPrintingLesson] = useState<Lesson | null>(null);
   
   const [exportScope, setExportScope] = useState<'all' | 'single'>('all');
   const [selectedStudentForExport, setSelectedStudentForExport] = useState<string>('');
@@ -44,28 +45,15 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
   };
 
   const copyStudentLink = (studentId: string, studentName: string) => {
-      // 1. Get base URL
       const baseUrl = window.location.origin + window.location.pathname;
-      
-      // 2. Determine targeted filename for THIS specific student
-      // If we've customized a filename for this student currently, use it.
-      // Otherwise use the default convention: studentname.json
-      let targetFile = 'student_data.json';
       const safeName = studentName.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const expectedFileName = `${safeName}.json`;
-
-      if (exportScope === 'single' && selectedStudentForExport === studentId) {
-          targetFile = dataFileName; // Use the one in the input box
-      } else {
-          targetFile = expectedFileName; // Default convention
-      }
+      const targetFile = (exportScope === 'single' && selectedStudentForExport === studentId) ? dataFileName : `${safeName}.json`;
       
       const queryParams = new URLSearchParams();
       queryParams.set('studentId', studentId);
-      queryParams.set('data', targetFile); // ALWAYS include data param to avoid 404
+      queryParams.set('data', targetFile);
       
       const url = `${baseUrl}?${queryParams.toString()}`;
-      
       navigator.clipboard.writeText(url).then(() => {
           setCopiedId(studentId);
           setTimeout(() => setCopiedId(null), 3000);
@@ -86,22 +74,68 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
       document.body.removeChild(link);
   };
 
-  const { pStudents, pLessons } = getPreviewData();
-  function getPreviewData() {
+  const handlePrint = (lesson: Lesson) => {
+    setPrintingLesson(lesson);
+    setTimeout(() => {
+        window.print();
+        setPrintingLesson(null);
+    }, 500);
+  };
+
+  const { pStudents, pLessons } = (() => {
     if (exportScope === 'single' && selectedStudentForExport) {
         const s = students.find(st => st.id === selectedStudentForExport);
         return s ? { pStudents: [s], pLessons: lessons.filter(l => s.assignedLessonIds.includes(l.id)) } : { pStudents: [], pLessons: [] };
     }
     return { pStudents: students, pLessons: lessons };
-  }
+  })();
 
   return (
     <div className="max-w-6xl mx-auto p-6 relative">
+      {/* 打印专用区域 */}
+      {printingLesson && (
+        <div id="printable-area" className="fixed inset-0 bg-white z-[9999] p-10 overflow-auto">
+            <div className="border-b-4 border-teal-600 pb-4 mb-8">
+                <h1 className="text-4xl font-bold text-gray-900">{printingLesson.title}</h1>
+                <p className="text-teal-600 font-bold uppercase tracking-widest text-sm mt-1">Student Handout • YuetYu Tutor</p>
+            </div>
+            <div className="space-y-12">
+                {printingLesson.sentences.map((s, idx) => (
+                    <div key={idx} className="break-inside-avoid border-b border-gray-100 pb-8">
+                        <div className="flex flex-wrap gap-x-6 gap-y-8 mb-6 items-end">
+                            {s.words.map((w, wi) => (
+                                <div key={wi} className="flex flex-col items-center">
+                                    <span className="text-base font-bold text-teal-600 mb-1">{w.selectedJyutping}</span>
+                                    <span className="text-4xl font-serif text-gray-900">{w.char}</span>
+                                </div>
+                            ))}
+                        </div>
+                        <p className="text-xl italic text-gray-700 bg-gray-50 p-4 rounded-xl border-l-4 border-teal-400">{s.english}</p>
+                        {s.explanationText && (
+                            <div className="mt-4 p-5 bg-orange-50 rounded-xl text-sm border border-orange-100 flex gap-3">
+                                <Lightbulb size={20} className="text-orange-500 shrink-0"/>
+                                <div><strong>Notes:</strong> {s.explanationText}</div>
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+        </div>
+      )}
+      <style>{`
+        @media print {
+            body > *:not(#printable-area) { display: none !important; }
+            #printable-area { display: block !important; position: static !important; }
+        }
+      `}</style>
+
       <header className="mb-8 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div><h1 className="text-3xl font-bold text-gray-800">Teacher Dashboard</h1><p className="text-gray-600 mt-1">Manage lessons and students.</p></div>
             <button onClick={handleCreateLesson} className="flex items-center gap-2 bg-teal-600 text-white px-5 py-3 rounded-xl hover:bg-teal-700 transition shadow-md font-bold"><Plus size={20} />Create Lesson</button>
         </div>
+        
+        {/* 导出工具栏 */}
         <div className="mt-6 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-xl p-5">
             <div className="flex items-start gap-3 mb-4"><div className="bg-orange-100 p-2 rounded-full text-orange-600 mt-1"><UploadCloud size={24}/></div><div><h3 className="font-bold text-orange-900 text-lg">Publish Data</h3><p className="text-sm text-orange-800/80">Export student-specific JSON for better privacy and speed.</p></div></div>
             <div className="flex flex-col md:flex-row gap-4 items-end bg-white/50 p-4 rounded-lg border border-orange-100">
@@ -112,6 +146,34 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
             </div>
         </div>
       </header>
+
+      {/* 弹窗逻辑 - 修复点击无反应的关键 */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 animate-fade-in">
+                <div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold flex items-center gap-2"><FileJson className="text-teal-600"/>Preview JSON Content</h3><button onClick={() => setShowPreviewModal(false)}><X/></button></div>
+                <div className="max-h-80 overflow-auto bg-gray-50 p-4 rounded-xl text-sm border">
+                    <div className="mb-4"><strong>Lessons:</strong> {pLessons.length} units ({pLessons.map(l => l.title).join(', ')})</div>
+                    <div><strong>Students:</strong> {pStudents.length} profiles ({pStudents.map(s => s.name).join(', ')})</div>
+                </div>
+                <div className="mt-6 flex justify-end gap-3"><button onClick={() => setShowPreviewModal(false)} className="px-4 py-2 text-gray-500">Close</button><button onClick={() => {setShowPreviewModal(false); setShowExportGuide(true);}} className="px-6 py-2 bg-teal-600 text-white rounded-lg font-bold">Looks Good</button></div>
+            </div>
+        </div>
+      )}
+
+      {showExportGuide && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 animate-fade-in text-center">
+                <Download size={48} className="text-teal-600 mx-auto mb-4"/>
+                <h3 className="text-2xl font-bold text-gray-800 mb-2">Ready to Export</h3>
+                <p className="text-gray-600 mb-6 text-sm">Download <strong>{dataFileName}</strong> and upload it to the <code>public</code> folder in your GitHub repo.</p>
+                <div className="flex flex-col gap-3">
+                    <button onClick={() => { performExport(); setShowExportGuide(false); }} className="w-full bg-teal-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-teal-700">Download File</button>
+                    <button onClick={() => setShowExportGuide(false)} className="text-gray-400 text-sm">Cancel</button>
+                </div>
+            </div>
+        </div>
+      )}
 
       <div className="flex gap-8 mb-6 border-b border-gray-200">
         <button onClick={() => setActiveTab('lessons')} className={`pb-3 px-2 font-medium transition text-lg flex items-center gap-2 ${activeTab === 'lessons' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-gray-400'}`}><History size={20} /> My Lessons</button>
@@ -126,6 +188,7 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
               <p className="text-sm text-gray-500 mb-6 line-clamp-2 min-h-[40px]">{lesson.sentences[0]?.english || "No content"}</p>
               <div className="mt-auto pt-4 border-t border-gray-100 flex gap-2">
                 <button onClick={() => handleEditLesson(lesson)} className="flex-1 py-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg text-sm font-bold flex items-center justify-center gap-1"><Edit size={14} /> Edit</button>
+                <button onClick={() => handlePrint(lesson)} className="flex-1 py-2 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg text-sm font-bold flex items-center justify-center gap-1"><Printer size={14} /> PDF</button>
                 <button onClick={() => deleteLesson(lesson.id)} className="p-2 text-red-400 hover:text-red-600"><Trash2 size={18} /></button>
               </div>
             </div>
@@ -159,8 +222,6 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
              ))}
         </div>
       )}
-
-      {/* MODALS REMAIN FUNCTIONAL BUT REMOVED FOR BREVITY IN DISPLAY, LOGIC INTEGRATED ABOVE */}
     </div>
   );
 };
