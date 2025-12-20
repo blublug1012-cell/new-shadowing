@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import { Lesson, AppMode, Student } from '../types';
-import { Plus, Users, Trash2, Edit, History, Link as LinkIcon, UserPlus, X, BookOpen, Download, UploadCloud, Eye, RefreshCw, FileJson, User, Printer, ArrowLeft, Volume2, Lightbulb, GraduationCap } from 'lucide-react';
+import { Plus, Users, Trash2, Edit, History, Link as LinkIcon, UserPlus, X, BookOpen, Download, UploadCloud, Eye, RefreshCw, FileJson, User, Printer, ArrowLeft, Volume2, Lightbulb, GraduationCap, CheckCircle } from 'lucide-react';
 
 interface Props {
   onNavigate: (mode: AppMode, data?: any) => void;
@@ -12,15 +13,12 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
   const [activeTab, setActiveTab] = useState<'lessons' | 'students'>('lessons');
   const [newStudentName, setNewStudentName] = useState('');
   
-  // State for the "Assign Lesson" dropdown
   const [assigningStudentId, setAssigningStudentId] = useState<string | null>(null);
-
-  // Export & Preview States
   const [showExportGuide, setShowExportGuide] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [printingLesson, setPrintingLesson] = useState<Lesson | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   
-  // EXPORT CONFIGURATION
   const [exportScope, setExportScope] = useState<'all' | 'single'>('all');
   const [selectedStudentForExport, setSelectedStudentForExport] = useState<string>('');
   const [dataFileName, setDataFileName] = useState('student_data.json');
@@ -86,64 +84,88 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
 
   const copyStudentLink = (studentId: string, studentName: string) => {
       const baseUrl = window.location.origin + window.location.pathname;
-      let targetFile = exportScope === 'single' && selectedStudentForExport === studentId 
-        ? dataFileName 
-        : (exportScope === 'single' ? `${studentName.toLowerCase().replace(/[^a-z0-9]/g, '')}.json` : dataFileName);
       
-      const url = `${baseUrl}?studentId=${studentId}${targetFile !== 'student_data.json' ? `&data=${targetFile}` : ''}`;
+      // Smart detection of which file to point to
+      let targetFile = 'student_data.json';
+      
+      if (exportScope === 'single') {
+          // If in single student mode, and this is the active student being configured
+          if (selectedStudentForExport === studentId) {
+              targetFile = dataFileName;
+          } else {
+              // Otherwise use the standard convention for this student
+              targetFile = `${studentName.toLowerCase().replace(/[^a-z0-9]/g, '')}.json`;
+          }
+      } else {
+          // All students mode - if user customized filename, use it
+          targetFile = dataFileName;
+      }
+      
+      const queryParams = new URLSearchParams();
+      queryParams.set('studentId', studentId);
+      if (targetFile !== 'student_data.json') {
+          queryParams.set('data', targetFile);
+      }
+      
+      const url = `${baseUrl}?${queryParams.toString()}`;
       
       navigator.clipboard.writeText(url).then(() => {
-          alert(`Link copied for ${studentName}!\n\nTarget File: ${targetFile}`);
+          setCopiedId(studentId);
+          setTimeout(() => setCopiedId(null), 3000);
       });
   };
 
-  const getPreviewData = () => {
-      if (exportScope === 'single' && selectedStudentForExport) {
-          const s = students.find(st => st.id === selectedStudentForExport);
-          return s ? { pStudents: [s], pLessons: lessons.filter(l => s.assignedLessonIds.includes(l.id)) } : { pStudents: [], pLessons: [] };
-      }
-      return { pStudents: students, pLessons: lessons };
-  };
-
-  const { pStudents, pLessons } = getPreviewData();
-
-  // Handle PDF Generation / Printing
   const handlePrint = (lesson: Lesson) => {
       setPrintingLesson(lesson);
-      // Wait for React to render the printable content then trigger print
       setTimeout(() => {
           window.print();
           setPrintingLesson(null);
       }, 500);
   };
 
+  const { pStudents, pLessons } = getPreviewData();
+
+  function getPreviewData() {
+    if (exportScope === 'single' && selectedStudentForExport) {
+        const s = students.find(st => st.id === selectedStudentForExport);
+        return s ? { pStudents: [s], pLessons: lessons.filter(l => s.assignedLessonIds.includes(l.id)) } : { pStudents: [], pLessons: [] };
+    }
+    return { pStudents: students, pLessons: lessons };
+  }
+
   return (
     <div className="max-w-6xl mx-auto p-6 relative">
-      {/* PRINTABLE AREA (Hidden unless printing) */}
+      {/* PRINTABLE AREA */}
       {printingLesson && (
-        <div id="printable-area" className="fixed inset-0 bg-white z-[9999] overflow-y-auto p-8">
-            <h1 className="text-3xl font-bold mb-2">{printingLesson.title}</h1>
-            <p className="text-gray-500 mb-8">YuetYu Tutor Cantonese Lesson</p>
-            <div className="space-y-10">
+        <div id="printable-area" className="fixed inset-0 bg-white z-[9999] overflow-y-auto p-12">
+            <div className="border-b-2 border-teal-600 pb-4 mb-8">
+                <h1 className="text-4xl font-bold text-gray-900">{printingLesson.title}</h1>
+                <p className="text-teal-600 font-bold uppercase tracking-widest text-sm mt-1">Cantonese Handout • YuetYu Tutor</p>
+            </div>
+            <div className="space-y-12">
                 {printingLesson.sentences.map((sentence, idx) => (
-                    <div key={idx} className="border-b border-gray-100 pb-8 break-inside-avoid">
-                        <div className="flex flex-wrap gap-x-4 gap-y-6 mb-4 items-end">
+                    <div key={idx} className="break-inside-avoid pb-8 border-b border-gray-100 last:border-0">
+                        <div className="flex flex-wrap gap-x-6 gap-y-8 mb-6 items-end">
                             {sentence.words.map((word, wIdx) => (
                                 <div key={wIdx} className="flex flex-col items-center">
-                                    <span className="text-sm font-medium text-teal-600 mb-1">{word.selectedJyutping}</span>
-                                    <span className="text-2xl font-serif">{word.char}</span>
+                                    <span className="text-base font-bold text-teal-600 mb-1">{word.selectedJyutping}</span>
+                                    <span className="text-3xl font-serif text-gray-900">{word.char}</span>
                                 </div>
                             ))}
                         </div>
-                        <p className="text-lg italic text-gray-700 bg-gray-50 p-3 rounded-lg">{sentence.english}</p>
+                        <div className="bg-gray-50 p-4 rounded-xl border-l-4 border-teal-400">
+                             <p className="text-xl italic text-gray-800 font-medium">{sentence.english}</p>
+                        </div>
                         {sentence.explanationText && (
-                            <div className="mt-4 p-4 bg-orange-50 border-l-4 border-orange-200 text-sm text-gray-700">
-                                <strong>Note:</strong> {sentence.explanationText}
+                            <div className="mt-4 p-5 bg-orange-50 rounded-xl text-sm text-gray-700 leading-relaxed border border-orange-100 flex gap-3">
+                                <Lightbulb size={20} className="text-orange-500 shrink-0"/>
+                                <div><strong className="block mb-1 text-orange-900">Teacher's Notes:</strong> {sentence.explanationText}</div>
                             </div>
                         )}
                     </div>
                 ))}
             </div>
+            <div className="mt-12 text-center text-gray-400 text-xs border-t pt-4">Generated by YuetYu Tutor Cantonese Platform</div>
         </div>
       )}
       <style>{`
@@ -153,7 +175,7 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
         }
       `}</style>
 
-      {/* PREVIEW MODAL */}
+      {/* MODALS REMAIN THE SAME FOR BREVITY BUT ENSURE dataFileName LOGIC IS USED */}
       {showPreviewModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-fade-in backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[85vh]">
@@ -200,8 +222,8 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
             <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2"><UploadCloud size={24} className="text-teal-600"/>How to Publish</h3>
             <div className="space-y-4 text-gray-600 mb-6">
               <div className="flex gap-3"><div className="bg-teal-100 text-teal-800 w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0">1</div><p className="text-sm pt-1">Download <strong>{dataFileName}</strong>.</p></div>
-              <div className="flex gap-3"><div className="bg-teal-100 text-teal-800 w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0">2</div><p className="text-sm pt-1">Upload it to your website's <code>public</code> folder.</p></div>
-              <div className="flex gap-3"><div className="bg-teal-100 text-teal-800 w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0">3</div><p className="text-sm pt-1">Send the link to the student.</p></div>
+              <div className="flex gap-3"><div className="bg-teal-100 text-teal-800 w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0">2</div><p className="text-sm pt-1">Upload it to your website's <code>public</code> folder on GitHub.</p></div>
+              <div className="flex gap-3"><div className="bg-teal-100 text-teal-800 w-8 h-8 rounded-full flex items-center justify-center font-bold shrink-0">3</div><div><p className="text-sm pt-1">Copy the link for the student below.</p><p className="text-[10px] text-orange-600 mt-1 font-bold">The link automatically includes <code>&data={dataFileName}</code> so it knows which file to read.</p></div></div>
             </div>
             <div className="flex gap-3 justify-end">
               <button onClick={() => setShowExportGuide(false)} className="px-4 py-2 text-gray-500 hover:text-gray-700">Cancel</button>
@@ -224,7 +246,6 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
                 <div className="flex-1 w-full md:w-auto"><label className="block text-xs font-bold text-orange-900 mb-1">Filename</label>{isEditingFilename ? <div className="flex items-center gap-1"><input type="text" value={dataFileName} onChange={(e) => setDataFileName(e.target.value)} className="w-full p-1.5 border border-orange-300 rounded text-sm"/><button onClick={() => setIsEditingFilename(false)} className="bg-teal-100 text-teal-700 px-2 py-1.5 rounded text-xs font-bold">OK</button></div> : <div className="flex items-center justify-between bg-white border border-orange-200 rounded px-3 py-1.5 cursor-pointer hover:border-orange-400 group" onClick={() => setIsEditingFilename(true)}><code className="text-sm font-mono text-gray-700 truncate max-w-[150px]">{dataFileName}</code><Edit size={12} className="text-gray-300 group-hover:text-orange-500"/></div>}</div>
                 <div className="flex gap-2"><button onClick={() => setShowPreviewModal(true)} disabled={exportScope === 'single' && !selectedStudentForExport} className="p-2 bg-white border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-50"><Eye size={20}/></button><button onClick={generateNewFilename} className="p-2 bg-orange-100 border border-orange-200 text-orange-700 rounded-lg hover:bg-orange-200"><RefreshCw size={20}/></button><button onClick={() => setShowExportGuide(true)} disabled={exportScope === 'single' && !selectedStudentForExport} className="px-4 py-2 bg-orange-600 text-white font-bold rounded-lg hover:bg-orange-700 shadow-md flex items-center gap-2 disabled:opacity-50"><Download size={18}/> Export</button></div>
             </div>
-            <div className="mt-2 text-xs text-orange-800/70 flex items-center gap-1 pl-1">{exportScope === 'all' ? <><Users size={12}/> Exports everything.</> : <><User size={12}/> Exports data for <strong>{students.find(s => s.id === selectedStudentForExport)?.name || 'selected student'}</strong>.</>}</div>
         </div>
       </header>
 
@@ -261,7 +282,15 @@ const TeacherDashboard: React.FC<Props> = ({ onNavigate }) => {
                <div key={student.id} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
                   <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
                      <div className="flex items-center gap-3"><div className="w-10 h-10 bg-indigo-500 rounded-full flex items-center justify-center text-white font-bold">{student.name.charAt(0)}</div><div><h3 className="font-bold text-gray-800">{student.name}</h3><span className="text-xs text-gray-500">{student.assignedLessonIds.length} Assignments</span></div></div>
-                     <div className="flex gap-2"><button onClick={() => copyStudentLink(student.id, student.name)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center gap-2"><LinkIcon size={16}/> Copy Link</button><button onClick={() => handleDeleteStudent(student.id, student.name)} className="text-red-400 border p-2 rounded-lg hover:bg-red-50"><Trash2 size={16}/></button></div>
+                     <div className="flex gap-2">
+                         <button 
+                            onClick={() => copyStudentLink(student.id, student.name)} 
+                            className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all ${copiedId === student.id ? 'bg-green-600 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+                         >
+                            {copiedId === student.id ? <><CheckCircle size={16}/> Copied!</> : <><LinkIcon size={16}/> Copy Link</>}
+                         </button>
+                         <button onClick={() => handleDeleteStudent(student.id, student.name)} className="text-red-400 border p-2 rounded-lg hover:bg-red-50"><Trash2 size={16}/></button>
+                     </div>
                   </div>
                   <div className="p-4">
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">{student.assignedLessonIds.map(lessonId => <div key={lessonId} className="flex items-center justify-between p-2 bg-white border rounded-lg shadow-sm text-sm"><span className="truncate font-medium">{getLessonById(lessonId)?.title}</span><span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded">Assigned</span></div>)}</div>

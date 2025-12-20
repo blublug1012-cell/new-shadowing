@@ -5,7 +5,7 @@ import TeacherDashboard from './components/TeacherDashboard';
 import LessonEditor from './components/LessonEditor';
 import StudentPortal from './components/StudentPortal';
 import { AppMode, Lesson, ClassroomData } from './types';
-import { GraduationCap, AlertTriangle, Loader2, Lock, Info, FileX, RefreshCw } from 'lucide-react';
+import { GraduationCap, AlertTriangle, Loader2, Lock, Info, FileX, RefreshCw, ChevronRight } from 'lucide-react';
 
 interface ErrorBoundaryProps {
   children?: ReactNode;
@@ -16,10 +16,11 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-// Fixed ErrorBoundary by using React.Component and initializing state correctly
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Using property initialization for state
-  override state: ErrorBoundaryState = { hasError: false, error: null };
+// Fixed ErrorBoundary extension by using Component instead of React.Component
+// This ensures that 'props' and 'state' are correctly recognized as inherited members.
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  // Removed 'override' as it was causing a compile error when inheritance was not correctly inferred.
+  state: ErrorBoundaryState = { hasError: false, error: null };
 
   constructor(props: ErrorBoundaryProps) {
     super(props);
@@ -37,25 +38,26 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
-          <div className="bg-white p-8 rounded-xl shadow-lg max-w-lg w-full border border-red-100">
-            <div className="flex items-center gap-3 text-red-600 mb-4">
-              <AlertTriangle size={32} />
-              <h1 className="text-xl font-bold">Something went wrong</h1>
+          <div className="bg-white p-8 rounded-xl shadow-lg max-w-lg w-full border border-red-100 text-center">
+            <div className="flex flex-col items-center gap-3 text-red-600 mb-4">
+              <AlertTriangle size={48} />
+              <h1 className="text-xl font-bold">Unexpected Error</h1>
             </div>
-            <p className="text-gray-600 mb-4">The application encountered an unexpected error.</p>
-            <div className="bg-gray-100 p-4 rounded text-sm font-mono overflow-auto max-h-40 mb-4">
+            <p className="text-gray-600 mb-6">The application encountered a critical error. Your data is likely safe in the browser's storage.</p>
+            <div className="bg-gray-100 p-4 rounded text-xs font-mono overflow-auto max-h-40 mb-6 text-left border border-gray-200">
               {this.state.error?.toString()}
             </div>
             <button 
               onClick={() => window.location.reload()} 
-              className="w-full bg-teal-600 text-white py-2 rounded-lg hover:bg-teal-700 font-bold"
+              className="w-full bg-teal-600 text-white py-3 rounded-xl hover:bg-teal-700 font-bold shadow-lg"
             >
-              Reload Application
+              Refresh Application
             </button>
           </div>
         </div>
       );
     }
+    // this.props.children is now valid because extension of Component is fixed.
     return this.props.children;
   }
 }
@@ -71,42 +73,43 @@ const AppLogic: React.FC = () => {
   const [pinError, setPinError] = useState('');
   
   const [studentIdFromUrl, setStudentIdFromUrl] = useState<string | null>(null);
-  const [fetchError, setFetchError] = useState<{file: string, status: string | number} | null>(null);
+  const [fetchError, setFetchError] = useState<{file: string, status: string | number, detail: string} | null>(null);
   const [isFetchingData, setIsFetchingData] = useState(false);
   
   const hasInitializedRef = useRef(false);
 
   useEffect(() => {
     const init = async () => {
-        // PREVENT DOUBLE INIT - This was likely causing the flicker/error
         if (hasInitializedRef.current) return;
         hasInitializedRef.current = true;
 
         const urlParams = new URLSearchParams(window.location.search);
         const sId = urlParams.get('studentId');
+        // Default to student_data.json if no data param provided
         const dataFileName = urlParams.get('data') || 'student_data.json';
         
         if (sId) {
             setStudentIdFromUrl(sId);
             setIsFetchingData(true);
             
-            // Cache busting URL
-            const fetchUrl = `/${dataFileName}?t=${Date.now()}`;
+            // CRITICAL FIX: Use relative path './' instead of absolute '/' 
+            // This ensures it works on GitHub Pages subdirectories
+            const fetchUrl = `./${dataFileName}?t=${Date.now()}`;
             
             try {
                 const res = await fetch(fetchUrl);
                 
                 if (res.ok) {
                     const contentType = res.headers.get("content-type");
-                    if (contentType && !contentType.includes("application/json")) {
-                        throw new Error("Server returned HTML (likely a 404 page) instead of JSON.");
+                    // Detect if server returned a 404 HTML page instead of JSON
+                    if (contentType && contentType.includes("text/html")) {
+                        throw new Error(`The file '${dataFileName}' was not found. The server returned a webpage instead.`);
                     }
 
                     const data: ClassroomData = await res.json();
                     
-                    // Verify data structure minimally
                     if (!data.students || !data.lessons) {
-                        throw new Error("Data file is valid JSON but missing student/lesson fields.");
+                        throw new Error("Data file is valid JSON but formatted incorrectly.");
                     }
 
                     loadStaticData(data);
@@ -114,19 +117,22 @@ const AppLogic: React.FC = () => {
                 } else {
                     setFetchError({ 
                         file: dataFileName, 
-                        status: res.status === 404 ? "File Not Found (404)" : `Server Error: ${res.status}` 
+                        status: res.status === 404 ? "File Not Found (404)" : `Server Error: ${res.status}`,
+                        detail: "The student link points to a file that doesn't exist on the server yet."
                     });
                 }
             } catch (e: any) {
                 console.error("Initialization Error:", e);
                 setFetchError({ 
                     file: dataFileName, 
-                    status: e.message.includes("JSON") ? "Invalid JSON format. Check if the file is empty or corrupted." : e.message 
+                    status: "Loading Failed",
+                    detail: e.message || "Invalid JSON format or network error."
                 });
             } finally {
                 setIsFetchingData(false);
             }
         } else {
+            // Check if teacher deep link
             if (window.location.hash === '#/teacher') {
                 setIsTeacherLoginVisible(true);
             }
@@ -171,7 +177,6 @@ const AppLogic: React.FC = () => {
     }
   };
 
-  // If we are currently fetching remote student data, show ONLY the loader
   if (isFetchingData) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-6 text-center">
@@ -180,44 +185,57 @@ const AppLogic: React.FC = () => {
             <RefreshCw className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-teal-200" size={24} />
         </div>
         <h2 className="text-xl font-bold text-gray-800 mb-2">Connecting to Student Portal</h2>
-        <p className="text-gray-500 max-w-xs">Loading classroom lessons. Please wait a moment...</p>
+        <p className="text-gray-500 max-w-xs">Fetching lessons from your teacher's cloud. Please wait...</p>
       </div>
     );
   }
 
-  // Handle Fetch Errors
   if (fetchError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
-            <div className="bg-white p-8 rounded-xl shadow-lg max-w-lg w-full text-center border-t-4 border-red-500">
-                <div className="bg-red-100 text-red-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <FileX size={32} />
+            <div className="bg-white p-8 rounded-2xl shadow-xl max-w-lg w-full text-center border-t-8 border-red-500">
+                <div className="bg-red-50 text-red-500 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <FileX size={40} />
                 </div>
-                <h2 className="text-2xl font-bold text-gray-800 mb-2">Connection Failed</h2>
-                <p className="text-gray-600 mb-4 text-sm">We could not load <strong>{fetchError.file}</strong> from the server.</p>
-                <div className="bg-gray-100 p-4 rounded-lg text-left text-xs font-mono text-gray-700 mb-6 border border-gray-200">
-                    <p><strong>Reason:</strong> {fetchError.status}</p>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Connection Failed</h2>
+                <p className="text-gray-600 mb-6">We could not load <code className="bg-gray-100 px-1 rounded text-red-600">{fetchError.file}</code>.</p>
+                
+                <div className="bg-gray-50 p-5 rounded-xl text-left border border-gray-100 mb-8">
+                    <div className="flex items-center gap-2 text-red-700 font-bold mb-1 text-sm">
+                        <AlertTriangle size={14}/>
+                        <span>Error Detail:</span>
+                    </div>
+                    <p className="text-sm font-mono text-gray-700 mb-4">{fetchError.status}</p>
+                    
+                    <div className="border-t border-gray-200 pt-4">
+                         <h3 className="font-bold text-blue-900 mb-2 text-sm">Troubleshooting for Teacher:</h3>
+                         <ul className="text-sm space-y-3 text-blue-800">
+                            <li className="flex gap-2"><ChevronRight size={14} className="shrink-0 mt-1"/> Link looks for: <strong>{fetchError.file}</strong>. Ensure you uploaded this exact filename.</li>
+                            <li className="flex gap-2"><ChevronRight size={14} className="shrink-0 mt-1"/> Check if file is in the <code>public</code> folder on GitHub.</li>
+                            <li className="flex gap-2"><ChevronRight size={14} className="shrink-0 mt-1"/> If you just updated it, GitHub Pages might take 1-2 mins to sync.</li>
+                         </ul>
+                    </div>
                 </div>
-                <div className="text-left bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm">
-                    <h3 className="font-bold text-blue-800 mb-2">Troubleshooting for Teacher:</h3>
-                    <ul className="list-disc pl-5 space-y-2 text-blue-700">
-                        <li>Did you upload <code>{fetchError.file}</code> to your website?</li>
-                        <li>Is the filename EXACTLY correct (case-sensitive)?</li>
-                        <li>If you just uploaded it, wait 1 minute for the cache to clear.</li>
-                    </ul>
+
+                <div className="flex flex-col gap-3">
+                    <button 
+                        onClick={() => window.location.reload()} 
+                        className="bg-teal-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-teal-700 transition shadow-lg flex items-center justify-center gap-2"
+                    >
+                        <RefreshCw size={18}/> Try Again
+                    </button>
+                    <button 
+                        onClick={() => navigate(AppMode.ROLE_SELECT)}
+                        className="text-gray-500 hover:text-gray-700 text-sm font-medium"
+                    >
+                        Go to Main Menu
+                    </button>
                 </div>
-                <button 
-                    onClick={() => window.location.reload()} 
-                    className="mt-6 bg-teal-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-teal-700 transition w-full shadow-lg"
-                >
-                    Try Again
-                </button>
             </div>
         </div>
       );
   }
 
-  // Fallback Loading for general App state
   if (isLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
