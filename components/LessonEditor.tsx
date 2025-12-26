@@ -4,7 +4,7 @@ import { useData } from '../contexts/DataContext';
 import { generateCantoneseLesson } from '../services/geminiService';
 import { Lesson, Sentence, AppMode } from '../types';
 import AudioRecorder from './AudioRecorder';
-import { ArrowLeft, Wand2, Save, Loader2, Image as ImageIcon, Youtube, MessageSquareText, Mic, Printer, Lightbulb } from 'lucide-react';
+import { ArrowLeft, Wand2, Save, Loader2, Image as ImageIcon, Youtube, MessageSquareText, Mic, Printer, Lightbulb, AlertCircle } from 'lucide-react';
 
 interface Props {
   onNavigate: (mode: AppMode) => void;
@@ -15,22 +15,22 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
   const { addLesson, updateLesson } = useData();
   const [title, setTitle] = useState(editLesson?.title || '');
   const [inputText, setInputText] = useState('');
-  const [mediaType, setMediaType] = useState<'image' | 'youtube'>(editLesson?.mediaType === 'youtube' ? 'youtube' : 'image');
   const [mediaUrl, setMediaUrl] = useState(editLesson?.mediaUrl || '');
-  const [youtubeInput, setYoutubeInput] = useState(editLesson?.mediaType === 'youtube' ? editLesson.mediaUrl : '');
   const [sentences, setSentences] = useState<Sentence[]>(editLesson?.sentences || []);
   const [isProcessing, setIsProcessing] = useState(false);
   const [step, setStep] = useState<1 | 2>(editLesson ? 2 : 1);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   const handleAIProcess = async () => {
     if (!inputText.trim()) return;
     setIsProcessing(true);
+    setErrorMessage(null);
     try {
       const generatedSentences = await generateCantoneseLesson(inputText);
       setSentences(generatedSentences);
       setStep(2);
     } catch (error: any) {
-      alert(`Error: ${error.message}`);
+      setErrorMessage(error.message);
     } finally {
       setIsProcessing(false);
     }
@@ -51,7 +51,7 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
       title,
       createdAt: editLesson?.createdAt || Date.now(),
       mediaUrl,
-      mediaType: mediaUrl ? mediaType : undefined,
+      mediaType: mediaUrl ? 'image' : undefined,
       sentences
     };
     if (editLesson) updateLesson(lessonData);
@@ -112,8 +112,14 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
 
       {step === 1 ? (
         <div className="space-y-6 no-print">
+          {errorMessage && (
+            <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-start gap-3 animate-fade-in">
+              <AlertCircle className="shrink-0 mt-0.5" size={20} />
+              <p className="text-sm font-medium">{errorMessage}</p>
+            </div>
+          )}
           <textarea value={inputText} onChange={(e) => setInputText(e.target.value)} className="w-full h-64 p-4 border rounded-2xl outline-none focus:ring-2 focus:ring-teal-500 leading-relaxed" placeholder="Paste Cantonese text here..."/>
-          <button onClick={handleAIProcess} disabled={isProcessing || !inputText.trim()} className="w-full flex justify-center items-center gap-2 bg-teal-600 text-white py-4 rounded-xl hover:bg-teal-700 font-bold text-lg">{isProcessing ? <Loader2 className="animate-spin" /> : <Wand2 />}Generate with AI</button>
+          <button onClick={handleAIProcess} disabled={isProcessing || !inputText.trim()} className="w-full flex justify-center items-center gap-2 bg-teal-600 text-white py-4 rounded-xl hover:bg-teal-700 font-bold text-lg transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100">{isProcessing ? <><Loader2 className="animate-spin" /> 正在分析文本...</> : <><Wand2 /> AI 生成教案</>}</button>
         </div>
       ) : (
         <div className="space-y-8 no-print">
@@ -137,9 +143,9 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
             ))}
           </div>
 
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-3xl px-4 flex gap-4">
-              <button onClick={handlePrint} className="flex-1 py-4 bg-white border-2 border-teal-600 text-teal-600 rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl"><Printer size={18} /> Print Handout (PDF)</button>
-              <button onClick={saveLesson} className="flex-1 py-4 bg-teal-600 text-white rounded-xl hover:bg-teal-700 font-bold flex items-center justify-center gap-2 shadow-xl"><Save size={18} /> Save Lesson</button>
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-3xl px-4 flex gap-4 z-50">
+              <button onClick={handlePrint} className="flex-1 py-4 bg-white border-2 border-teal-600 text-teal-600 rounded-xl font-bold flex items-center justify-center gap-2 shadow-xl hover:bg-teal-50 transition-all"><Printer size={18} /> 打印讲义</button>
+              <button onClick={saveLesson} className="flex-1 py-4 bg-teal-600 text-white rounded-xl hover:bg-teal-700 font-bold flex items-center justify-center gap-2 shadow-xl transition-all"><Save size={18} /> 保存课程</button>
           </div>
         </div>
       )}

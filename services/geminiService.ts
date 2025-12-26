@@ -3,7 +3,6 @@ import { GoogleGenAI, Type, HarmCategory, HarmBlockThreshold, Modality } from "@
 import { Sentence, Word } from "../types";
 
 // Helper to convert raw PCM to WAV so browsers can play it
-// Gemini TTS returns 24kHz, 1 channel, 16-bit PCM by default
 const addWavHeader = (pcmBase64: string): string => {
   try {
     const binaryString = atob(pcmBase64);
@@ -24,31 +23,24 @@ const addWavHeader = (pcmBase64: string): string => {
     const header = new ArrayBuffer(44);
     const dv = new DataView(header);
 
-    // RIFF chunk descriptor
     writeString(dv, 0, 'RIFF');
     dv.setUint32(4, 36 + dataSize, true);
     writeString(dv, 8, 'WAVE');
-
-    // fmt sub-chunk
     writeString(dv, 12, 'fmt ');
-    dv.setUint32(16, 16, true); // Subchunk1Size (16 for PCM)
-    dv.setUint16(20, 1, true); // AudioFormat (1 for PCM)
+    dv.setUint32(16, 16, true);
+    dv.setUint16(20, 1, true);
     dv.setUint16(22, numChannels, true);
     dv.setUint32(24, sampleRate, true);
     dv.setUint32(28, byteRate, true);
     dv.setUint16(32, blockAlign, true);
     dv.setUint16(34, bitsPerSample, true);
-
-    // data sub-chunk
     writeString(dv, 36, 'data');
     dv.setUint32(40, dataSize, true);
 
-    // Concatenate header and data
     const wavBuffer = new Uint8Array(header.byteLength + dataSize);
     wavBuffer.set(new Uint8Array(header), 0);
     wavBuffer.set(view, header.byteLength);
 
-    // Convert back to base64
     let binary = '';
     const bytes = new Uint8Array(wavBuffer);
     const l = bytes.byteLength;
@@ -69,8 +61,6 @@ function writeString(view: DataView, offset: number, string: string) {
   }
 }
 
-// Initializing the Google GenAI client correctly with a named parameter.
-// Uses process.env.API_KEY directly as required.
 const getAIClient = () => {
   if (!process.env.API_KEY) {
     throw new Error("API Key Error: 'process.env.API_KEY' is missing.");
@@ -80,8 +70,8 @@ const getAIClient = () => {
 
 export const generateCantoneseLesson = async (text: string): Promise<Sentence[]> => {
   const ai = getAIClient();
-  // Selected gemini-3-pro-preview for complex reasoning task (Cantonese linguistic analysis)
-  const model = "gemini-3-pro-preview";
+  // Switching to Flash model to avoid RESOURCE_EXHAUSTED errors while maintaining high quality for linguistic tasks.
+  const model = "gemini-3-flash-preview";
   
   const prompt = `
     Analyze the following Cantonese text, which may contain mixed English and punctuation.
@@ -94,9 +84,8 @@ export const generateCantoneseLesson = async (text: string): Promise<Sentence[]>
     4. For each token:
        - If it is a Chinese character: Provide an array of contextually accurate Jyutping.
          * IMPORTANT: Handle polyphones correctly based on context. 
-         * Example: '嘅' in '点解嘅' (question particle) is 'ge2', but '嘅' in '我嘅' (possessive) is 'ge3'.
        - If it is English or Punctuation: Return an empty array [] for jyutping.
-       - 'selectedJyutping' should default to the first jyutping, or empty string if none.
+       - 'selectedJyutping' should default to the first jyutping.
 
     Text to analyze:
     "${text}"
@@ -107,8 +96,9 @@ export const generateCantoneseLesson = async (text: string): Promise<Sentence[]>
       model: model,
       contents: prompt,
       config: {
-        systemInstruction: "You are a specialized Cantonese teacher. You handle code-switching (mixed English/Cantonese) perfectly. You represent English words as single units and preserve punctuation exactly.",
+        systemInstruction: "You are a specialized Cantonese teacher. You handle code-switching perfectly and provide high-accuracy contextual Jyutping. You only output valid JSON.",
         responseMimeType: "application/json",
+        thinkingConfig: { thinkingBudget: 0 }, // Flash doesn't need high thinking budget for this extraction task
         responseSchema: {
           type: Type.ARRAY,
           items: {
@@ -138,7 +128,6 @@ export const generateCantoneseLesson = async (text: string): Promise<Sentence[]>
       }
     });
 
-    // Extracting text output using the .text property (not a method).
     if (response.text) {
       const cleanText = response.text.trim();
       const data = JSON.parse(cleanText);
@@ -149,10 +138,14 @@ export const generateCantoneseLesson = async (text: string): Promise<Sentence[]>
     }
   } catch (error: any) {
     console.error("Gemini API Error details:", error);
-    throw new Error(error.message || "Unknown API Error");
+    // User-friendly error mapping
+    if (error.message?.includes("429") || error.message?.includes("RESOURCE_EXHAUSTED")) {
+        throw new Error("AI 额度已达上限（每分钟请求太频繁）。请稍等 1 分钟后再试，或者减少一次性输入的内容量。");
+    }
+    throw new Error(error.message || "生成内容失败，请检查网络或稍后再试。");
   }
 
-  throw new Error("No response from AI.");
+  throw new Error("AI 未返回有效内容。");
 };
 
 export const generateCantoneseSpeech = async (text: string): Promise<string> => {
@@ -161,12 +154,9 @@ export const generateCantoneseSpeech = async (text: string): Promise<string> => 
   }
 
   const ai = getAIClient();
-  // Using the dedicated text-to-speech model
   const model = "gemini-2.5-flash-preview-tts";
 
   try {
-    console.log("[TTS Request] Generating speech for:", text.substring(0, 20) + "...");
-
     const response = await ai.models.generateContent({
       model: model,
       contents: [{ parts: [{ text: text }] }],
@@ -180,32 +170,17 @@ export const generateCantoneseSpeech = async (text: string): Promise<string> => 
       },
     });
 
-    // Search through all parts to find the audio (inlineData) part.
     const audioPart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
     const base64Audio = audioPart?.inlineData?.data;
     
     if (base64Audio) {
       return addWavHeader(base64Audio);
     }
-
-    const candidate = response.candidates?.[0];
-    const finishReason = candidate?.finishReason;
-    const textPart = candidate?.content?.parts?.[0]?.text;
-
-    console.warn("[TTS Failure Debug]", { finishReason, textPart, candidate });
-
-    if (textPart) {
-      throw new Error(`Model returned text instead of audio: ${textPart.substring(0, 50)}...`);
-    }
-
-    if (finishReason) {
-       throw new Error(`Generation stopped. Reason: ${finishReason}. (Check console for details)`);
-    }
-
-    throw new Error("No audio data returned from API (Empty response)");
-
+    throw new Error("TTS 语音生成失败，未收到音频数据。");
   } catch (error: any) {
-    console.error("TTS Error:", error);
-    throw new Error(error.message || "Failed to generate speech");
+    if (error.message?.includes("429") || error.message?.includes("RESOURCE_EXHAUSTED")) {
+        throw new Error("语音合成频率太快，请稍后再试。");
+    }
+    throw new Error(error.message || "合成语音失败");
   }
 };
