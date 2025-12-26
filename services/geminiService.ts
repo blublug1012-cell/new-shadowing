@@ -70,41 +70,33 @@ const getAIClient = () => {
 
 export const generateCantoneseLesson = async (text: string): Promise<Sentence[]> => {
   const ai = getAIClient();
-  // Switching to Flash model to avoid RESOURCE_EXHAUSTED errors while maintaining high quality for linguistic tasks.
+  // Using gemini-3-flash-preview for complex text tasks as recommended
   const model = "gemini-3-flash-preview";
   
   const prompt = `
-    Analyze the following Cantonese text, which may contain mixed English and punctuation.
+    Analyze the following Cantonese text.
+    1. Split into sentences.
+    2. Translate each sentence to English.
+    3. Tokenize carefully: preserve punctuation, keep English words whole, split Chinese characters.
+    4. Provide Jyutping for each Chinese character (handle context).
     
-    1. Break the text down into sentences.
-    2. For each sentence, provide the English translation.
-    3. Break the sentence down into strictly separated 'tokens'. 
-       - A token is: A single Chinese character, OR a full English word (do not split letters), OR a punctuation mark.
-       - Preserve all original punctuation.
-    4. For each token:
-       - If it is a Chinese character: Provide an array of contextually accurate Jyutping.
-         * IMPORTANT: Handle polyphones correctly based on context. 
-       - If it is English or Punctuation: Return an empty array [] for jyutping.
-       - 'selectedJyutping' should default to the first jyutping.
-
-    Text to analyze:
-    "${text}"
+    Text: "${text}"
   `;
 
   try {
+    // Calling generateContent with Gemini model and prompt as per guidelines
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,
       config: {
-        systemInstruction: "You are a specialized Cantonese teacher. You handle code-switching perfectly and provide high-accuracy contextual Jyutping. You only output valid JSON.",
+        systemInstruction: "You are a professional Cantonese linguist. Output ONLY strictly valid JSON based on the schema.",
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 }, // Flash doesn't need high thinking budget for this extraction task
+        thinkingConfig: { thinkingBudget: 0 },
         responseSchema: {
           type: Type.ARRAY,
           items: {
             type: Type.OBJECT,
             properties: {
-              id: { type: Type.STRING },
               english: { type: Type.STRING },
               words: {
                 type: Type.ARRAY,
@@ -112,46 +104,44 @@ export const generateCantoneseLesson = async (text: string): Promise<Sentence[]>
                   type: Type.OBJECT,
                   properties: {
                     char: { type: Type.STRING },
-                    jyutping: { 
-                      type: Type.ARRAY,
-                      items: { type: Type.STRING }
-                    },
+                    jyutping: { type: Type.ARRAY, items: { type: Type.STRING } },
                     selectedJyutping: { type: Type.STRING }
                   },
                   required: ["char", "jyutping", "selectedJyutping"]
                 }
               }
             },
-            required: ["id", "english", "words"]
+            required: ["english", "words"]
           }
         }
       }
     });
 
     if (response.text) {
-      const cleanText = response.text.trim();
-      const data = JSON.parse(cleanText);
+      const data = JSON.parse(response.text.trim());
       return data.map((s: any, idx: number) => ({
         ...s,
-        id: s.id || `sent-${Date.now()}-${idx}`
+        id: `sent-${Date.now()}-${idx}`
       }));
     }
   } catch (error: any) {
-    console.error("Gemini API Error details:", error);
-    // User-friendly error mapping
-    if (error.message?.includes("429") || error.message?.includes("RESOURCE_EXHAUSTED")) {
-        throw new Error("AI 额度已达上限（每分钟请求太频繁）。请稍等 1 分钟后再试，或者减少一次性输入的内容量。");
+    console.error("Gemini API Error:", error);
+    
+    const msg = error.message || "";
+    if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
+        throw new Error("QUOTA_EXHAUSTED");
     }
-    throw new Error(error.message || "生成内容失败，请检查网络或稍后再试。");
+    if (msg.includes("400")) {
+        throw new Error("输入文本可能过长或包含敏感词，请尝试分段输入。");
+    }
+    throw new Error(msg || "生成内容失败，请检查网络后重试。");
   }
 
-  throw new Error("AI 未返回有效内容。");
+  throw new Error("AI 未返回内容");
 };
 
 export const generateCantoneseSpeech = async (text: string): Promise<string> => {
-  if (!text || !text.trim()) {
-    throw new Error("Text is empty");
-  }
+  if (!text || !text.trim()) throw new Error("Text is empty");
 
   const ai = getAIClient();
   const model = "gemini-2.5-flash-preview-tts";
@@ -173,14 +163,10 @@ export const generateCantoneseSpeech = async (text: string): Promise<string> => 
     const audioPart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
     const base64Audio = audioPart?.inlineData?.data;
     
-    if (base64Audio) {
-      return addWavHeader(base64Audio);
-    }
-    throw new Error("TTS 语音生成失败，未收到音频数据。");
+    if (base64Audio) return addWavHeader(base64Audio);
+    throw new Error("TTS No Data");
   } catch (error: any) {
-    if (error.message?.includes("429") || error.message?.includes("RESOURCE_EXHAUSTED")) {
-        throw new Error("语音合成频率太快，请稍后再试。");
-    }
-    throw new Error(error.message || "合成语音失败");
+    if (error.message?.includes("429")) throw new Error("语音合成太频繁，请稍后。");
+    throw new Error("合成语音失败");
   }
 };
