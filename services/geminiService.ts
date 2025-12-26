@@ -70,26 +70,18 @@ const getAIClient = () => {
 
 export const generateCantoneseLesson = async (text: string): Promise<Sentence[]> => {
   const ai = getAIClient();
-  // Using gemini-3-flash-preview for complex text tasks as recommended
   const model = "gemini-3-flash-preview";
   
-  const prompt = `
-    Analyze the following Cantonese text.
-    1. Split into sentences.
-    2. Translate each sentence to English.
-    3. Tokenize carefully: preserve punctuation, keep English words whole, split Chinese characters.
-    4. Provide Jyutping for each Chinese character (handle context).
-    
-    Text: "${text}"
-  `;
+  // Minimalist prompt to avoid filtering and reduce token overhead
+  const prompt = `Task: Split Cantonese text into sentences with English translation and character-level Jyutping.
+Text: "${text}"`;
 
   try {
-    // Calling generateContent with Gemini model and prompt as per guidelines
-    const response = await ai.models.generateContent({
+    const apiPromise = ai.models.generateContent({
       model: model,
       contents: prompt,
       config: {
-        systemInstruction: "You are a professional Cantonese linguist. Output ONLY strictly valid JSON based on the schema.",
+        systemInstruction: "You are a Cantonese linguist. Output ONLY valid JSON array of objects with schema: [{english:string, words:[{char:string, selectedJyutping:string}]}]",
         responseMimeType: "application/json",
         thinkingConfig: { thinkingBudget: 0 },
         responseSchema: {
@@ -104,10 +96,9 @@ export const generateCantoneseLesson = async (text: string): Promise<Sentence[]>
                   type: Type.OBJECT,
                   properties: {
                     char: { type: Type.STRING },
-                    jyutping: { type: Type.ARRAY, items: { type: Type.STRING } },
                     selectedJyutping: { type: Type.STRING }
                   },
-                  required: ["char", "jyutping", "selectedJyutping"]
+                  required: ["char", "selectedJyutping"]
                 }
               }
             },
@@ -116,6 +107,12 @@ export const generateCantoneseLesson = async (text: string): Promise<Sentence[]>
         }
       }
     });
+
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("TIMEOUT")), 35000)
+    );
+
+    const response = await Promise.race([apiPromise, timeoutPromise]) as any;
 
     if (response.text) {
       const data = JSON.parse(response.text.trim());
@@ -126,15 +123,13 @@ export const generateCantoneseLesson = async (text: string): Promise<Sentence[]>
     }
   } catch (error: any) {
     console.error("Gemini API Error:", error);
+    if (error.message === "TIMEOUT") throw new Error("TIMEOUT");
     
     const msg = error.message || "";
     if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
         throw new Error("QUOTA_EXHAUSTED");
     }
-    if (msg.includes("400")) {
-        throw new Error("输入文本可能过长或包含敏感词，请尝试分段输入。");
-    }
-    throw new Error(msg || "生成内容失败，请检查网络后重试。");
+    throw new Error("AI 服务繁忙，请稍后再试或使用手动模式。");
   }
 
   throw new Error("AI 未返回内容");
@@ -166,7 +161,7 @@ export const generateCantoneseSpeech = async (text: string): Promise<string> => 
     if (base64Audio) return addWavHeader(base64Audio);
     throw new Error("TTS No Data");
   } catch (error: any) {
-    if (error.message?.includes("429")) throw new Error("语音合成太频繁，请稍后。");
+    if (error.message?.includes("429")) throw new Error("QUOTA_EXHAUSTED");
     throw new Error("合成语音失败");
   }
 };

@@ -2,9 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import { generateCantoneseLesson } from '../services/geminiService';
-import { Lesson, Sentence, AppMode } from '../types';
+import { Lesson, Sentence, AppMode, Word } from '../types';
 import AudioRecorder from './AudioRecorder';
-import { ArrowLeft, Wand2, Save, Loader2, Printer, AlertCircle, RefreshCw, Clock } from 'lucide-react';
+import { ArrowLeft, Wand2, Save, Loader2, Printer, AlertCircle, RefreshCw, Clock, Edit3, Sparkles } from 'lucide-react';
 
 interface Props {
   onNavigate: (mode: AppMode) => void;
@@ -22,7 +22,6 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [retryCountdown, setRetryCountdown] = useState(0);
   
-  // Handle countdown for rate limits
   useEffect(() => {
     let timer: any;
     if (retryCountdown > 0) {
@@ -34,7 +33,7 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
   }, [retryCountdown]);
 
   const handleAIProcess = async () => {
-    if (!inputText.trim() || retryCountdown > 0) return;
+    if (!inputText.trim()) return;
     
     setIsProcessing(true);
     setErrorMessage(null);
@@ -45,14 +44,60 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
       setStep(2);
     } catch (error: any) {
       if (error.message === "QUOTA_EXHAUSTED") {
-          setErrorMessage("AI 老师现在有点累（请求太频繁），请休息一下再试。");
-          setRetryCountdown(60); // Set a 60s cooldown
+          setErrorMessage("API 额度暂满：免费版 Gemini 每分钟请求次数有限。");
+          setRetryCountdown(50);
+      } else if (error.message === "TIMEOUT") {
+          setErrorMessage("网络请求超时，请检查您的网络连接并重试。");
       } else {
           setErrorMessage(error.message);
       }
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // NEW: Manual fallback mode to prevent teacher from being blocked by AI quotas
+  const handleManualProcess = () => {
+    if (!inputText.trim()) return;
+    
+    // Split by common Chinese punctuation
+    const splitRegex = /([。！？；\n!?;])/;
+    const parts = inputText.split(splitRegex);
+    const manualSentences: Sentence[] = [];
+    
+    let currentSentence = "";
+    for (let part of parts) {
+        if (splitRegex.test(part)) {
+            currentSentence += part;
+            if (currentSentence.trim()) {
+                manualSentences.push(createEmptySentence(currentSentence.trim()));
+            }
+            currentSentence = "";
+        } else {
+            currentSentence += part;
+        }
+    }
+    
+    if (currentSentence.trim()) {
+        manualSentences.push(createEmptySentence(currentSentence.trim()));
+    }
+
+    setSentences(manualSentences);
+    setStep(2);
+  };
+
+  const createEmptySentence = (text: string): Sentence => {
+    const words: Word[] = text.split('').map(char => ({
+        char,
+        jyutping: [],
+        selectedJyutping: ''
+    }));
+    
+    return {
+        id: `sent-manual-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        english: '',
+        words
+    };
   };
 
   const updateSentence = (id: string, field: Partial<Sentence>) => {
@@ -85,7 +130,7 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
         }
       `}</style>
 
-      {/* PRINTABLE HANDOUT (Hidden in web view) */}
+      {/* PRINTABLE HANDOUT */}
       <div id="printable-handout" className="hidden">
           <div className="border-b-4 border-teal-600 pb-4 mb-8">
             <h1 className="text-4xl font-bold text-gray-900">{title || 'Cantonese Lesson'}</h1>
@@ -115,23 +160,33 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
 
       <div className="mb-6 no-print">
         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">标题</label>
-        <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full p-3 text-xl font-bold border rounded-xl outline-none focus:ring-2 focus:ring-teal-500" placeholder="例如：我的第一课"/>
+        <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full p-3 text-xl font-bold border rounded-xl outline-none focus:ring-2 focus:ring-teal-500 shadow-sm" placeholder="例如：我的第一课"/>
       </div>
 
       {step === 1 ? (
-        <div className="space-y-6 no-print">
+        <div className="space-y-6 no-print animate-fade-in">
           {errorMessage && (
-            <div className="bg-red-50 border border-red-200 text-red-700 p-5 rounded-2xl flex flex-col gap-3 animate-fade-in">
+            <div className="bg-amber-50 border border-amber-200 text-amber-900 p-5 rounded-2xl flex flex-col gap-4 animate-fade-in shadow-sm">
               <div className="flex items-start gap-3">
-                <AlertCircle className="shrink-0 mt-0.5" size={20} />
-                <div>
-                  <p className="text-sm font-bold">生成遇到问题</p>
-                  <p className="text-xs mt-1 opacity-80">{errorMessage}</p>
+                <AlertCircle className="shrink-0 mt-0.5 text-amber-600" size={20} />
+                <div className="flex-1">
+                  <p className="text-sm font-bold">暂时无法使用 AI 生成</p>
+                  <p className="text-xs mt-1 opacity-80 leading-relaxed">{errorMessage}</p>
                 </div>
               </div>
-              <div className="flex gap-2 mt-1">
-                 <button onClick={handleAIProcess} disabled={retryCountdown > 0 || isProcessing} className="bg-white/50 px-4 py-2 rounded-lg text-xs font-bold hover:bg-white transition flex items-center gap-2 disabled:opacity-50">
-                   {retryCountdown > 0 ? <><Clock size={14}/> 冷却中 ({retryCountdown}s)</> : <><RefreshCw size={14}/> 立即重试</>}
+              <div className="flex flex-wrap gap-2">
+                 <button 
+                    onClick={handleAIProcess} 
+                    disabled={retryCountdown > 0 || isProcessing} 
+                    className="bg-white border border-amber-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-amber-100 transition flex items-center gap-2 disabled:opacity-50"
+                 >
+                   {retryCountdown > 0 ? <><Clock size={14}/> 还需要等 {retryCountdown}s</> : <><Sparkles size={14}/> 再次尝试 AI</>}
+                 </button>
+                 <button 
+                    onClick={handleManualProcess} 
+                    className="bg-amber-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-amber-700 transition flex items-center gap-2 shadow-sm"
+                 >
+                   <Edit3 size={14}/> 跳过 AI，手动分句编辑
                  </button>
               </div>
             </div>
@@ -141,37 +196,47 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
             <textarea 
               value={inputText} 
               onChange={(e) => setInputText(e.target.value)} 
-              className="w-full h-80 p-5 border rounded-2xl outline-none focus:ring-2 focus:ring-teal-500 leading-relaxed text-lg" 
-              placeholder="在这里粘贴粤语文本（建议每次输入不超过500字以获得最佳效果）..."
+              className="w-full h-80 p-6 border-2 border-gray-100 rounded-3xl outline-none focus:border-teal-500 leading-relaxed text-lg shadow-inner transition-colors" 
+              placeholder="在这里粘贴粤语文本..."
             />
-            <div className="absolute bottom-4 right-4 text-xs text-gray-400 font-mono">
+            <div className="absolute bottom-5 right-6 text-xs text-gray-400 font-mono bg-white/80 px-2 py-1 rounded">
               {inputText.length} 字
             </div>
           </div>
 
-          <button 
-            onClick={handleAIProcess} 
-            disabled={isProcessing || !inputText.trim() || retryCountdown > 0} 
-            className="w-full flex justify-center items-center gap-3 bg-teal-600 text-white py-5 rounded-2xl hover:bg-teal-700 font-bold text-xl transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 shadow-lg shadow-teal-600/20"
-          >
-            {isProcessing ? (
-              <><Loader2 className="animate-spin" /> 正在分析文本，请稍候...</>
-            ) : retryCountdown > 0 ? (
-              <><Clock /> 频率限制，请等待 {retryCountdown} 秒</>
-            ) : (
-              <><Wand2 /> 开始 AI 智能分析</>
-            )}
-          </button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button 
+                onClick={handleAIProcess} 
+                disabled={isProcessing || !inputText.trim() || retryCountdown > 0} 
+                className="flex justify-center items-center gap-3 bg-teal-600 text-white py-5 rounded-2xl hover:bg-teal-700 font-bold text-lg transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 shadow-xl shadow-teal-600/20"
+            >
+                {isProcessing ? (
+                <><Loader2 className="animate-spin" /> 分析中...</>
+                ) : retryCountdown > 0 ? (
+                <><Clock size={20} /> 等待冷却 ({retryCountdown}s)</>
+                ) : (
+                <><Wand2 /> AI 智能分析</>
+                )}
+            </button>
+            
+            <button 
+                onClick={handleManualProcess}
+                disabled={isProcessing || !inputText.trim()}
+                className="flex justify-center items-center gap-3 bg-white border-2 border-gray-200 text-gray-600 py-5 rounded-2xl hover:border-gray-400 font-bold text-lg transition-all active:scale-95 disabled:opacity-50"
+            >
+                <Edit3 size={20} /> 直接手动编辑
+            </button>
+          </div>
           
-          <p className="text-center text-xs text-gray-400">
-            * AI 将自动完成句子分割、英文翻译以及粤语拼音标注。
-          </p>
+          <div className="bg-gray-50 p-4 rounded-xl text-[11px] text-gray-400 leading-relaxed border border-gray-100">
+            <strong>提示：</strong> AI 模式会自动标注拼音和翻译，但受免费额度限制可能需要排队。手动模式不会联网，您可以直接切分句子并自己输入拼音。
+          </div>
         </div>
       ) : (
-        <div className="space-y-8 no-print">
+        <div className="space-y-8 no-print animate-fade-in">
           <div className="space-y-6">
             {sentences.map((sentence) => (
-              <div key={sentence.id} className="border border-gray-100 rounded-2xl p-6 shadow-sm bg-white hover:border-teal-200 transition-all group">
+              <div key={sentence.id} className="border border-gray-100 rounded-3xl p-6 shadow-sm bg-white hover:border-teal-200 transition-all group relative">
                 <div className="flex flex-wrap gap-x-4 gap-y-6 mb-6 items-end">
                   {sentence.words.map((word, wIdx) => (
                     <div key={wIdx} className="flex flex-col items-center">
@@ -183,7 +248,8 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
                              newWords[wIdx].selectedJyutping = e.target.value;
                              updateSentence(sentence.id, { words: newWords });
                           }}
-                          className="text-[10px] text-teal-600 font-bold text-center w-14 mb-1 border-none focus:ring-0 p-0 bg-transparent"
+                          className="text-[10px] text-teal-600 font-bold text-center w-14 mb-1 border-none focus:ring-0 p-0 bg-transparent placeholder-gray-200"
+                          placeholder="pinyin"
                         />
                         <span className="text-2xl font-serif text-gray-800">{word.char}</span>
                     </div>
@@ -193,23 +259,29 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
                   type="text" 
                   value={sentence.english} 
                   onChange={(e) => updateSentence(sentence.id, { english: e.target.value })} 
-                  className="w-full border-b pb-2 font-medium italic mb-4 outline-none focus:border-teal-500 text-gray-600" 
-                  placeholder="英文翻译..."
+                  className="w-full border-b pb-2 font-medium italic mb-4 outline-none focus:border-teal-500 text-gray-600 placeholder-gray-300" 
+                  placeholder="在这里输入英文翻译..."
                 />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-gray-50 p-4 rounded-xl flex justify-between items-center">
+                    <div className="bg-gray-50 p-4 rounded-2xl flex justify-between items-center">
                       <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">老师录音</span>
                       <AudioRecorder existingAudio={sentence.audioBase64} onSave={(base64) => updateSentence(sentence.id, { audioBase64: base64 })} />
                     </div>
-                    <div className="bg-orange-50/50 p-4 rounded-xl">
+                    <div className="bg-orange-50/50 p-4 rounded-2xl border border-orange-50">
                       <textarea 
                         value={sentence.explanationText || ''} 
                         onChange={(e) => updateSentence(sentence.id, { explanationText: e.target.value })} 
-                        className="w-full text-xs p-3 bg-white border border-orange-100 rounded-lg outline-none focus:ring-1 focus:ring-orange-200" 
-                        placeholder="添加教学重点或备注..."
+                        className="w-full text-xs p-3 bg-white border border-orange-100 rounded-xl outline-none focus:ring-1 focus:ring-orange-200 min-h-[60px]" 
+                        placeholder="教学重点或发音技巧..."
                       />
                     </div>
                 </div>
+                <button 
+                  onClick={() => setSentences(prev => prev.filter(s => s.id !== sentence.id))}
+                  className="absolute -top-2 -right-2 bg-white text-gray-300 hover:text-red-500 shadow-sm border rounded-full p-1 transition-colors"
+                >
+                  <ArrowLeft size={14} className="rotate-90"/>
+                </button>
               </div>
             ))}
           </div>
