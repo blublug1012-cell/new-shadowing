@@ -4,7 +4,7 @@ import { useData } from '../contexts/DataContext';
 import { generateCantoneseLesson } from '../services/geminiService';
 import { Lesson, Sentence, AppMode, Word } from '../types';
 import AudioRecorder from './AudioRecorder';
-import { ArrowLeft, Wand2, Save, Loader2, Printer, AlertCircle, RefreshCw, Clock, Edit3, Sparkles } from 'lucide-react';
+import { ArrowLeft, Wand2, Save, Loader2, Printer, AlertCircle, RefreshCw, Clock, Edit3, Sparkles, Lightbulb } from 'lucide-react';
 
 interface Props {
   onNavigate: (mode: AppMode) => void;
@@ -56,11 +56,9 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
     }
   };
 
-  // NEW: Manual fallback mode to prevent teacher from being blocked by AI quotas
   const handleManualProcess = () => {
     if (!inputText.trim()) return;
     
-    // Split by common Chinese punctuation
     const splitRegex = /([。！？；\n!?;])/;
     const parts = inputText.split(splitRegex);
     const manualSentences: Sentence[] = [];
@@ -130,7 +128,7 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
         }
       `}</style>
 
-      {/* PRINTABLE HANDOUT */}
+      {/* PRINTABLE HANDOUT - FIXED TO INCLUDE EXPLANATIONS */}
       <div id="printable-handout" className="hidden">
           <div className="border-b-4 border-teal-600 pb-4 mb-8">
             <h1 className="text-4xl font-bold text-gray-900">{title || 'Cantonese Lesson'}</h1>
@@ -147,7 +145,15 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
                               </div>
                           ))}
                       </div>
-                      <p className="text-xl italic text-gray-700 bg-gray-50 p-4 rounded-xl border-l-4 border-teal-400">{s.english}</p>
+                      <p className="text-xl italic text-gray-700 bg-gray-50 p-4 rounded-xl border-l-4 border-teal-400 mb-4">{s.english}</p>
+                      
+                      {/* FIXED: Added Explanation Text Section to Printable View */}
+                      {s.explanationText && (
+                        <div className="p-5 bg-orange-50 rounded-xl text-sm border border-orange-100 flex gap-3 text-gray-800">
+                           <div className="font-bold text-orange-600 shrink-0">Notes:</div>
+                           <div className="whitespace-pre-wrap leading-relaxed">{s.explanationText}</div>
+                        </div>
+                      )}
                   </div>
               ))}
           </div>
@@ -226,10 +232,6 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
             >
                 <Edit3 size={20} /> 直接手动编辑
             </button>
-          </div>
-          
-          <div className="bg-gray-50 p-4 rounded-xl text-[11px] text-gray-400 leading-relaxed border border-gray-100">
-            <strong>提示：</strong> AI 模式会自动标注拼音和翻译，但受免费额度限制可能需要排队。手动模式不会联网，您可以直接切分句子并自己输入拼音。
           </div>
         </div>
       ) : (

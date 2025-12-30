@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, ReactNode, useRef } from 'react';
+import React, { Component, useState, useEffect, ReactNode, useRef } from 'react';
 import { DataProvider, useData } from './contexts/DataContext';
 import TeacherDashboard from './components/TeacherDashboard';
 import LessonEditor from './components/LessonEditor';
@@ -19,9 +19,9 @@ interface ErrorBoundaryState {
 /**
  * ErrorBoundary properly extends React Component with props and state types to ensure member visibility.
  */
-// Fix: Explicitly declare state and props types by extending React.Component and adding state field to satisfy TS requirements
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  public override state: ErrorBoundaryState = { hasError: false, error: null };
+// Fix: Use Component directly from react and remove invalid override modifier to ensure proper inheritance and property access
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState = { hasError: false, error: null };
 
   constructor(props: ErrorBoundaryProps) {
     super(props);
@@ -36,7 +36,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 
   render() {
-    // Fix: Using this.state and this.props now works as expected in TypeScript with explicit type declaration
+    // Fix: Accessing this.state and this.props now works as inheritance is correctly established with generic parameters
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
