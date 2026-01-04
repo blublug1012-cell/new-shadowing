@@ -1,8 +1,8 @@
 
-import { GoogleGenAI, Type, HarmCategory, HarmBlockThreshold, Modality } from "@google/genai";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { Sentence, Word } from "../types";
 
-// Helper to convert raw PCM to WAV so browsers can play it
+// Helper to convert raw PCM to WAV
 const addWavHeader = (pcmBase64: string): string => {
   try {
     const binaryString = atob(pcmBase64);
@@ -68,22 +68,27 @@ const getAIClient = () => {
   return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
-export const generateCantoneseLesson = async (text: string): Promise<Sentence[]> => {
+export const generateLessonContent = async (text: string, mode: 'cantonese' | 'mandarin'): Promise<Sentence[]> => {
   const ai = getAIClient();
   const model = "gemini-3-flash-preview";
   
-  // Minimalist prompt to avoid filtering and reduce token overhead
-  const prompt = `Task: Split Cantonese text into sentences with English translation and character-level Jyutping.
+  const phoneticType = mode === 'cantonese' ? 'Jyutping' : 'Mandarin Pinyin (with tones)';
+  
+  const prompt = `Task: Analyze the following text and split it into logical sentences.
+For each sentence, provide:
+1. English translation.
+2. Character-level breakdown with ${phoneticType}. 
 Text: "${text}"`;
 
   try {
-    const apiPromise = ai.models.generateContent({
+    const response = await ai.models.generateContent({
       model: model,
       contents: prompt,
       config: {
-        systemInstruction: "You are a Cantonese linguist. Output ONLY valid JSON array of objects with schema: [{english:string, words:[{char:string, selectedJyutping:string}]}]",
+        systemInstruction: `You are an expert Chinese linguist. Your goal is to help students learn ${mode}. 
+Output ONLY valid JSON array. Punctuation should be separate objects in the "words" array but should have empty "selectedJyutping". 
+Output schema: [{english: string, words: [{char: string, selectedJyutping: string}]}]`,
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 },
         responseSchema: {
           type: Type.ARRAY,
           items: {
@@ -108,12 +113,6 @@ Text: "${text}"`;
       }
     });
 
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error("TIMEOUT")), 35000)
-    );
-
-    const response = await Promise.race([apiPromise, timeoutPromise]) as any;
-
     if (response.text) {
       const data = JSON.parse(response.text.trim());
       return data.map((s: any, idx: number) => ({
@@ -123,16 +122,14 @@ Text: "${text}"`;
     }
   } catch (error: any) {
     console.error("Gemini API Error:", error);
-    if (error.message === "TIMEOUT") throw new Error("TIMEOUT");
-    
     const msg = error.message || "";
     if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
         throw new Error("QUOTA_EXHAUSTED");
     }
-    throw new Error("AI 服务繁忙，请稍后再试或使用手动模式。");
+    throw new Error("AI 系统暂不可用，请稍后再试或点击“手动编辑”。");
   }
 
-  throw new Error("AI 未返回内容");
+  throw new Error("AI 未返回有效内容");
 };
 
 export const generateCantoneseSpeech = async (text: string): Promise<string> => {

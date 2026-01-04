@@ -1,5 +1,5 @@
 
-import React, { Component, useState, useEffect, ReactNode, useRef } from 'react';
+import React, { useState, useEffect, ReactNode, useRef } from 'react';
 import { DataProvider, useData } from './contexts/DataContext';
 import TeacherDashboard from './components/TeacherDashboard';
 import LessonEditor from './components/LessonEditor';
@@ -19,12 +19,11 @@ interface ErrorBoundaryState {
 /**
  * ErrorBoundary properly extends React Component with props and state types to ensure member visibility.
  */
-// Fix: Use Component directly from react and remove invalid override modifier to ensure proper inheritance and property access
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  public state: ErrorBoundaryState = { hasError: false, error: null };
-
+// Use React.Component explicitly with generic parameters to ensure proper inheritance and property access for props and state
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
+    this.state = { hasError: false, error: null };
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
@@ -36,7 +35,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   render() {
-    // Fix: Accessing this.state and this.props now works as inheritance is correctly established with generic parameters
+    // Accessing this.state and this.props now works as inheritance is correctly established with generic parameters
     if (this.state.hasError) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
