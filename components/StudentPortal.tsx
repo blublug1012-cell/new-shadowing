@@ -239,14 +239,14 @@ const StudentPortal: React.FC<Props> = ({ onLogout, importMessage, studentId }) 
                   {/* Words Row */}
                   <div className="flex flex-wrap gap-x-3 gap-y-4 mb-3 items-end">
                     {sentence.words.map((word, idx) => {
-                      const hasJyutping = word.jyutping && word.jyutping.length > 0;
+                      const phonetic = word.selectedJyutping?.trim() || (word.jyutping && word.jyutping.length > 0 ? word.jyutping[0] : '');
+                      const hasJyutping = phonetic.length > 0;
                       return (
                         <div key={idx} className="flex flex-col items-center text-center">
-                          {hasJyutping && (
-                            <span className="text-sm font-medium text-teal-600 mb-0.5">{word.selectedJyutping}</span>
-                          )}
-                          {!hasJyutping && (
-                             <div className="h-5"></div>
+                          {hasJyutping ? (
+                            <span className="text-sm font-medium text-teal-600 mb-0.5">{phonetic}</span>
+                          ) : (
+                            <div className="h-5 mb-0.5"></div>
                           )}
                           <span className="text-2xl text-gray-800 font-serif leading-none">{word.char}</span>
                         </div>
