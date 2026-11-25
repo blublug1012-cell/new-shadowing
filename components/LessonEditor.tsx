@@ -4,7 +4,7 @@ import { useData } from '../contexts/DataContext';
 import { generateLessonContent } from '../services/geminiService';
 import { Lesson, Sentence, AppMode, Word } from '../types';
 import AudioRecorder from './AudioRecorder';
-import { ArrowLeft, Wand2, Save, Loader2, Printer, AlertCircle, RefreshCw, Clock, Edit3, Sparkles, Languages, Type as TypeIcon, Check, X } from 'lucide-react';
+import { ArrowLeft, Wand2, Save, Loader2, Printer, AlertCircle, RefreshCw, Clock, Edit3, Sparkles, Languages, Type as TypeIcon, Check, X, Plus, FileText } from 'lucide-react';
 
 interface Props {
   onNavigate: (mode: AppMode) => void;
@@ -25,6 +25,10 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
   // Bulk Edit State
   const [bulkEditId, setBulkEditId] = useState<string | null>(null);
   const [bulkEditText, setBulkEditText] = useState('');
+
+  // Sentence Text Edit State
+  const [textEditId, setTextEditId] = useState<string | null>(null);
+  const [textEditValue, setTextEditValue] = useState('');
 
   useEffect(() => {
     let timer: any;
@@ -60,27 +64,13 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
 
   const handleManualProcess = () => {
     if (!inputText.trim()) return;
-    
-    const splitRegex = /([。！？；\n!?;])/;
-    const parts = inputText.split(splitRegex);
-    const manualSentences: Sentence[] = [];
-    
-    let currentSentence = "";
-    for (let part of parts) {
-        if (splitRegex.test(part)) {
-            currentSentence += part;
-            if (currentSentence.trim()) {
-                manualSentences.push(createEmptySentence(currentSentence.trim()));
-            }
-            currentSentence = "";
-        } else {
-            currentSentence += part;
-        }
-    }
-    
-    if (currentSentence.trim()) {
-        manualSentences.push(createEmptySentence(currentSentence.trim()));
-    }
+
+    const lines = inputText
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+
+    const manualSentences: Sentence[] = lines.map(line => createEmptySentence(line));
 
     setSentences(manualSentences);
     setStep(2);
@@ -105,6 +95,7 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
   };
 
   const openBulkEdit = (sentence: Sentence) => {
+    setTextEditId(null);
     setBulkEditId(sentence.id);
     const currentPhonetics = sentence.words
       .filter(w => /[\u4e00-\u9fa5]/.test(w.char))
@@ -132,6 +123,71 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
 
     updateSentence(id, { words: updatedWords });
     setBulkEditId(null);
+  };
+
+  const openTextEdit = (sentence: Sentence) => {
+    setBulkEditId(null);
+    setTextEditId(sentence.id);
+    setTextEditValue(sentence.words.map(w => w.char).join(''));
+  };
+
+  const applyTextEdit = (id: string) => {
+    const sentence = sentences.find(s => s.id === id);
+    if (!sentence) return;
+
+    const cleanedText = textEditValue.replace(/[\r\n]+/g, '').trim();
+    if (!cleanedText) {
+      alert('句子文本不能为空');
+      return;
+    }
+
+    const oldWords = sentence.words;
+    const newChars = cleanedText.split('');
+    const m = oldWords.length;
+    const n = newChars.length;
+
+    // LCS alignment to preserve existing jyutping/selectedJyutping for unchanged characters
+    const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+    for (let i = m - 1; i >= 0; i--) {
+      for (let j = n - 1; j >= 0; j--) {
+        if (oldWords[i].char === newChars[j]) {
+          dp[i][j] = 1 + dp[i + 1][j + 1];
+        } else {
+          dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+        }
+      }
+    }
+
+    const alignedWords: Word[] = [];
+    let i = 0;
+    let j = 0;
+    while (i < m && j < n) {
+      if (oldWords[i].char === newChars[j]) {
+        alignedWords.push(oldWords[i]);
+        i++;
+        j++;
+      } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+        i++;
+      } else {
+        alignedWords.push({ char: newChars[j], jyutping: [], selectedJyutping: '' });
+        j++;
+      }
+    }
+    while (j < n) {
+      alignedWords.push({ char: newChars[j], jyutping: [], selectedJyutping: '' });
+      j++;
+    }
+
+    updateSentence(id, { words: alignedWords });
+    setTextEditId(null);
+  };
+
+  const handleAddSentence = () => {
+    const newSent = createEmptySentence('');
+    setSentences(prev => [...prev, newSent]);
+    setBulkEditId(null);
+    setTextEditId(newSent.id);
+    setTextEditValue('');
   };
 
   const saveLesson = () => {
@@ -219,7 +275,7 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
               </div>
               <div className="flex flex-wrap gap-2">
                  <button onClick={handleAIProcess} disabled={retryCountdown > 0 || isProcessing} className="bg-white border border-amber-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-amber-100 transition flex items-center gap-2 disabled:opacity-50"><Sparkles size={14}/> 再次尝试 AI 识别</button>
-                 <button onClick={handleManualProcess} className="bg-amber-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-amber-700 transition flex items-center gap-2 shadow-sm"><Edit3 size={14}/> 跳过 AI，手动分句</button>
+                  <button onClick={handleManualProcess} className="bg-amber-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-amber-700 transition flex items-center gap-2 shadow-sm"><Edit3 size={14}/> 跳过 AI，按行分句</button>
               </div>
             </div>
           )}
@@ -229,7 +285,7 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
               value={inputText} 
               onChange={(e) => setInputText(e.target.value)} 
               className="w-full h-80 p-8 border-2 border-gray-100 rounded-[2.5rem] outline-none focus:border-teal-500 leading-relaxed text-lg shadow-inner transition-all bg-gray-50/30 group-hover:bg-white" 
-              placeholder="在这里粘贴教学文本（可以包含中英文、标点符号）..."
+              placeholder="在这里粘贴教学文本（按行分句：每行一句，不会按标点符号拆句）..."
             />
             <div className="absolute bottom-6 right-8 text-[10px] text-gray-400 font-bold uppercase tracking-widest bg-white/80 px-3 py-1 rounded-full border">
               {inputText.length} characters
@@ -245,7 +301,7 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
                 {isProcessing ? <><Loader2 className="animate-spin" /> 正在深度分析文本...</> : <><Wand2 /> AI 智能识别 (粤拼/拼音)</>}
             </button>
             <button onClick={handleManualProcess} disabled={isProcessing || !inputText.trim()} className="flex justify-center items-center gap-3 bg-white border-2 border-gray-200 text-gray-600 py-5 rounded-[2rem] hover:border-gray-400 font-bold text-lg transition-all active:scale-95 disabled:opacity-50">
-                <Edit3 size={20} /> 直接手动分句编辑
+                <Edit3 size={20} /> 直接按行分句编辑
             </button>
           </div>
         </div>
@@ -258,7 +314,13 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
                 {/* Sentence Toolbar */}
                 <div className="flex justify-between items-center mb-6">
                     <span className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em]">Sentence {sentences.indexOf(sentence) + 1}</span>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
+                        <button 
+                            onClick={() => openTextEdit(sentence)} 
+                            className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full hover:bg-indigo-100 flex items-center gap-1.5"
+                        >
+                            <FileText size={14}/> 编辑文本
+                        </button>
                         <button 
                             onClick={() => openBulkEdit(sentence)} 
                             className="text-xs font-bold text-teal-600 bg-teal-50 px-3 py-1.5 rounded-full hover:bg-teal-100 flex items-center gap-1.5"
@@ -273,6 +335,29 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
                         </button>
                     </div>
                 </div>
+
+                {/* Inline Sentence Text Editor */}
+                {textEditId === sentence.id && (
+                    <div className="mb-6 p-4 bg-indigo-50/70 border-2 border-indigo-200 rounded-2xl animate-fade-in">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-xs font-bold text-indigo-800 flex items-center gap-1.5">
+                                <FileText size={14}/> 修改句子文本（未改动的汉字会保留原有拼音）
+                            </span>
+                        </div>
+                        <textarea
+                            autoFocus
+                            rows={2}
+                            value={textEditValue}
+                            onChange={(e) => setTextEditValue(e.target.value)}
+                            className="w-full p-3 bg-white border border-indigo-200 rounded-xl outline-none focus:border-indigo-500 text-lg font-serif text-gray-800"
+                            placeholder="输入或修改这句课程文本..."
+                        />
+                        <div className="mt-3 flex gap-2 justify-end">
+                            <button onClick={() => setTextEditId(null)} className="px-4 py-2 text-xs font-bold text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50">取消</button>
+                            <button onClick={() => applyTextEdit(sentence.id)} className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 flex items-center gap-1.5 shadow-sm"><Check size={14}/> 保存文本</button>
+                        </div>
+                    </div>
+                )}
 
                 {/* Words Row with Character Display */}
                 <div className="flex flex-wrap gap-x-4 gap-y-8 mb-8 items-end">
@@ -292,6 +377,11 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
                         <span className="text-3xl font-serif text-gray-800">{word.char}</span>
                     </div>
                   ))}
+                  {sentence.words.length === 0 && textEditId !== sentence.id && (
+                    <button onClick={() => openTextEdit(sentence)} className="text-sm text-indigo-600 hover:underline font-medium">
+                      点击输入句子文本...
+                    </button>
+                  )}
                 </div>
 
                 {/* Bulk Edit Overlay */}
@@ -343,6 +433,13 @@ const LessonEditor: React.FC<Props> = ({ onNavigate, editLesson }) => {
                 </div>
               </div>
             ))}
+
+            <button
+              onClick={handleAddSentence}
+              className="w-full py-5 border-2 border-dashed border-gray-200 rounded-[2rem] text-gray-500 hover:text-teal-600 hover:border-teal-300 hover:bg-teal-50/30 font-bold flex items-center justify-center gap-2 transition-all"
+            >
+              <Plus size={20} /> 添加新句子
+            </button>
           </div>
 
           {/* Action Bar */}

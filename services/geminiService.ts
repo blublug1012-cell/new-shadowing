@@ -73,12 +73,25 @@ export const generateLessonContent = async (text: string, mode: 'cantonese' | 'm
   const model = "gemini-3-flash-preview";
   
   const phoneticType = mode === 'cantonese' ? 'Jyutping' : 'Mandarin Pinyin (with tones)';
+  const lines = text
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+
+  if (lines.length === 0) {
+    return [];
+  }
+
+  const numberedLines = lines.map((line, i) => `${i + 1}. ${line}`).join('\n');
   
-  const prompt = `Task: Analyze the following text and split it into logical sentences.
-For each sentence, provide:
+  const prompt = `Task: Analyze the following ${lines.length} lines.
+CRITICAL RULE: Treat EACH line strictly as ONE item (do NOT split a line by punctuation like commas, periods, or question marks, and do NOT merge lines). Output an array with exact length ${lines.length}, in the same order.
+For each line, provide:
 1. English translation.
-2. Character-level breakdown with ${phoneticType}. 
-Text: "${text}"`;
+2. Character-level breakdown with ${phoneticType}, preserving every character and punctuation mark from that line.
+
+Lines:
+${numberedLines}`;
 
   try {
     const response = await ai.models.generateContent({
@@ -86,7 +99,8 @@ Text: "${text}"`;
       contents: prompt,
       config: {
         systemInstruction: `You are an expert Chinese linguist. Your goal is to help students learn ${mode}. 
-Output ONLY valid JSON array. Punctuation should be separate objects in the "words" array but should have empty "selectedJyutping". 
+Output ONLY valid JSON array with exact length ${lines.length}, matching each input line 1-to-1. Never split a single line into multiple items based on punctuation.
+Punctuation and spaces should be separate objects in the "words" array with empty "selectedJyutping". 
 Output schema: [{english: string, words: [{char: string, selectedJyutping: string}]}]`,
         responseMimeType: "application/json",
         responseSchema: {
